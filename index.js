@@ -126,7 +126,11 @@ const KL_PACKS = new Set([
     "Queens Cup Champions",
     "Kings World Cup Nations: Prestige",
     "Kings World Cup Nations",
-    "Kings World Cup Nations: Reward"
+    "Kings World Cup Nations: Reward",
+	"Kings League Italy",
+	"Kings League Italy: Prestige",
+	"Kings League Spain: Prestige",
+	"Kings League Spain"
 ]);
 
 
@@ -652,9 +656,9 @@ function connectWebSocket() {
         const [eventName, eventData] = JSON.parse(data.substring(2));
         eventData.event = eventName; // Add event name to data for templates
 
-        console.log(
-          `📦 ${eventName}: ${JSON.stringify(eventData).substring(0, 40)}...`,
-        );
+        //console.log(
+        //  `📦 ${eventName}: ${JSON.stringify(eventData).substring(0, 40)}...`,
+        //);
 
         // Skip unwanted events
         if (!shouldProcessEvent(eventName)) return;
