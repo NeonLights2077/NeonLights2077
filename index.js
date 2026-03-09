@@ -1,5 +1,6 @@
 const { Client, GatewayIntentBits } = require("discord.js");
 const WebSocket = require("ws");
+const http = require("http");
 
 // Discord Client Setup
 const client = new Client({
@@ -133,7 +134,6 @@ const KL_PACKS = new Set([
 	"Kings League Spain"
 ]);
 
-
 // ======================= CHANNEL CONFIGURATION =======================
 const DEBUG_CHANNEL_ID = "1400226748611825725";
 const CATCH_ALL_CHANNEL_ID = "1400207538498179162";
@@ -151,8 +151,7 @@ const formatValue = (value, format = "") => {
 };
 
 // Template configuration for each channel
-
- const CHANNEL_CONFIG = [
+const CHANNEL_CONFIG = [
   // Debug channel (gets all non-filtered messages)
   {
     name: "debug",
@@ -167,14 +166,13 @@ const formatValue = (value, format = "") => {
       ),
   },
   
-
   // Catch-all channel (gets all non-filtered messages in detailed format)
   {
     name: "all",
     id: CATCH_ALL_CHANNEL_ID,
     event: "all",
     template: (data) => {
-      return `**${data.event.toUpperCase()}** | User: **${data.user?.username || "Unknown"}** | message: ${data}`;
+      return `**${data.event.toUpperCase()}** | User: **${data.user?.username || "Unknown"}** | Data: \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1900)}\`\`\``;
     },
     condition: (data) =>
       !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed"].includes(
@@ -183,9 +181,6 @@ const formatValue = (value, format = "") => {
   },
 
 // ======================= CS CHANNELS =======================
-// ======================= CS CHANNELS =======================
-// ======================= CS CHANNELS =======================
-
   // Pack opened events (mintNumber <= 30)
   {
     name: "feed-30",
@@ -602,7 +597,9 @@ const formatValue = (value, format = "") => {
 // WebSocket Management
 let socket;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
+const MAX_RECONNECT_ATTEMPTS = 10;
+let pingInterval;
+let reconnectTimeout;
 
 // ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
@@ -615,67 +612,154 @@ function shouldProcessEvent(eventName) {
   const SKIP_EVENTS = ["join-public-feed"];
   return !SKIP_EVENTS.includes(eventName);
 }
+
+function generateWebSocketKey() {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let key = "";
+  for (let i = 0; i < 16; i++) {
+    key += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return Buffer.from(key).toString("base64");
+}
 // ====================================================================
 
 function connectWebSocket() {
-  socket = new WebSocket(
-    "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket",
-  );
+  // Clear any existing reconnection timeout
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+
+  // Clear existing ping interval
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+
+  const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
+  
+  console.log(`🔄 Attempting connection to: ${wsUrl} (Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+  
+  // Generate a proper WebSocket key like browsers do
+  const wsKey = generateWebSocketKey();
+  
+  const options = {
+    headers: {
+      "accept-language": "en,ru;q=0.9,uk;q=0.8,ro;q=0.7,en-GB;q=0.6,fr;q=0.5",
+      "cache-control": "no-cache",
+      "pragma": "no-cache",
+      "sec-websocket-extensions": "permessage-deflate; client_max_window_bits",
+      "sec-websocket-key": wsKey,
+      "sec-websocket-version": "13",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "origin": "https://kolex.gg",
+      "host": "sockets.kolex.gg"
+    },
+    handshakeTimeout: 15000,
+    timeout: 30000,
+    rejectUnauthorized: true,
+    followRedirects: true
+  };
+
+  socket = new WebSocket(wsUrl, options);
 
   socket.on("open", () => {
-    console.log("🟢 WebSocket Connected");
-    //sendToDebugChannel("🟢 WebSocket Connected");
-    socket.send('42["join-public-feed"]');
+    console.log(`🟢 WebSocket Connected to ${wsUrl}`);
+    sendToDebugChannel(`🟢 WebSocket Connected to Kolex.gg`);
+    
     reconnectAttempts = 0;
+    
+    // Set up ping interval
+    pingInterval = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send("2");
+        console.log("📤 Sent ping (2)");
+      }
+    }, 20000); // Send ping every 20 seconds
+    
+    // Send join message after a short delay
+    setTimeout(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send('42["join-public-feed"]');
+        console.log("📤 Sent join-public-feed message");
+      }
+    }, 1000);
   });
 
-  socket.on("close", () => {
-    console.log("🔴 WebSocket Disconnected");
-    //sendToDebugChannel("🔴 WebSocket Disconnected");
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      const delay = Math.min(1000 * reconnectAttempts, 5000);
-      setTimeout(connectWebSocket, delay);
-      reconnectAttempts++;
+  socket.on("close", (code, reason) => {
+    console.log(`🔴 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
+    sendToDebugChannel(`🔴 WebSocket Disconnected (Code: ${code})`);
+    
+    // Clear ping interval
+    if (pingInterval) {
+      clearInterval(pingInterval);
+      pingInterval = null;
     }
+    
+    // Attempt to reconnect with exponential backoff
+    scheduleReconnect();
   });
 
   socket.on("error", (err) => {
-    console.error("WebSocket Error:", err);
+    console.error(`WebSocket Error:`, err.message);
     sendToDebugChannel(`❗ WebSocket Error: ${err.message}`);
   });
 
   socket.on("message", (rawData) => {
     try {
       const data = rawData.toString();
-      if (data === "3") {
+      
+      // Handle Socket.io ping/pong
+      if (data === "2") {
         socket.send("3");
+        console.log("📤 Sent pong (3)");
         return;
       }
 
-      if (data.startsWith("42")) {
-        const [eventName, eventData] = JSON.parse(data.substring(2));
-        eventData.event = eventName; // Add event name to data for templates
-
-        //console.log(
-        //  `📦 ${eventName}: ${JSON.stringify(eventData).substring(0, 40)}...`,
-        //);
-
-        // Skip unwanted events
-        if (!shouldProcessEvent(eventName)) return;
-
-        // Process matching channels
-        CHANNEL_CONFIG.forEach((config) => {
-          if (
-            (config.event === "all" || config.event === eventName) &&
-            (config.condition === null || config.condition(eventData))
-          ) {
-            sendToChannel(
-              config.id,
-              config.template(eventData)
-            );
-          }
-        });
+      if (data === "3") {
+        // Received pong, ignore
+        return;
       }
+
+      // Handle Socket.io handshake
+      if (data.startsWith("0")) {
+        console.log("🤝 Socket.io handshake received");
+        return;
+      }
+
+      if (data.startsWith("40")) {
+        console.log("🔌 Socket.io connected");
+        return;
+      }
+
+      // Handle Socket.io messages
+      if (data.startsWith("42")) {
+        try {
+          const payload = data.substring(2);
+          const parsed = JSON.parse(payload);
+          
+          if (Array.isArray(parsed) && parsed.length >= 2) {
+            const [eventName, eventData] = parsed;
+            
+            if (eventName && eventData) {
+              eventData.event = eventName;
+              
+              if (shouldProcessEvent(eventName)) {
+                processEventChannels(eventData);
+              }
+            }
+          }
+        } catch (parseError) {
+          console.error("Error parsing Socket.io message:", parseError.message);
+        }
+        return;
+      }
+      
+      // Log other message types for debugging
+      if (data.length < 100) {
+        console.log("📨 Unknown message:", data);
+      }
+      
     } catch (error) {
       console.error("Error processing message:", error);
       sendToDebugChannel(`❌ Processing Error: ${error.message}`);
@@ -683,12 +767,59 @@ function connectWebSocket() {
   });
 }
 
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log("❌ Max reconnection attempts reached");
+    sendToDebugChannel("❌ Max reconnection attempts reached - bot needs restart");
+    return;
+  }
+  
+  // Exponential backoff: 5s, 10s, 20s, 40s, 80s, etc.
+  const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000); // Max 5 minutes
+  console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
+  
+  reconnectTimeout = setTimeout(() => {
+    reconnectAttempts++;
+    connectWebSocket();
+  }, delay);
+}
+
+function processEventChannels(eventData) {
+  CHANNEL_CONFIG.forEach((config) => {
+    try {
+      if (
+        (config.event === "all" || config.event === eventData.event) &&
+        (config.condition === null || config.condition(eventData))
+      ) {
+        const message = config.template(eventData);
+        if (message) { // Only send if template returns a message
+          sendToChannel(config.id, message);
+        }
+      }
+    } catch (error) {
+      console.error(`Error processing channel ${config.name}:`, error);
+    }
+  });
+}
+
 function sendToChannel(channelId, message) {
+  if (!message) return;
+  
   const channel = client.channels.cache.get(channelId);
   if (channel) {
-    channel.send(message).catch((err) => {
-      console.error(`Error sending to channel ${channelId}:`, err);
-    });
+    // Split long messages if needed
+    if (message.length > 2000) {
+      const chunks = message.match(/.{1,1900}/g) || [];
+      chunks.forEach(chunk => {
+        channel.send(chunk).catch((err) => {
+          console.error(`Error sending to channel ${channelId}:`, err);
+        });
+      });
+    } else {
+      channel.send(message).catch((err) => {
+        console.error(`Error sending to channel ${channelId}:`, err);
+      });
+    }
   }
 }
 
@@ -700,26 +831,58 @@ function sendToDebugChannel(message) {
 client.on("ready", () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
   sendToDebugChannel("🤖 Bot started successfully");
-  connectWebSocket();
-
-  setInterval(() => {
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send("2");
-    }
-  }, 25000);
+  
+  // Small delay before connecting WebSocket
+  setTimeout(() => {
+    connectWebSocket();
+  }, 2000);
 });
 
-// Add at the bottom of your file (before client.login)
-const http = require("http");
+client.on("error", (error) => {
+  console.error("Discord client error:", error);
+  sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
+});
+
+// Health check server
 const server = http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("Bot is running");
+  res.writeHead(200, { 
+    'Content-Type': 'text/plain',
+    'Connection': 'keep-alive'
+  });
+  res.end(`Bot is running\nWebSocket: ${socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected'}\nUptime: ${process.uptime()}s`);
 });
-server.listen(8080);
+server.keepAliveTimeout = 60000; // 60 seconds
+server.listen(8080, '0.0.0.0', () => {
+  console.log('Health check server listening on port 8080');
+});
 
+// Validate token
+if (!process.env.TOKEN) {
+  console.error("❌ No Discord token found in environment variables!");
+  process.exit(1);
+}
+
+// Login with error handling
 client.login(process.env.TOKEN).catch((err) => {
   console.error("Login error:", err);
   process.exit(1);
 });
 
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully...');
+  if (pingInterval) clearInterval(pingInterval);
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
+  if (socket) socket.close();
+  client.destroy();
+  process.exit(0);
+});
 
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully...');
+  if (pingInterval) clearInterval(pingInterval);
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
+  if (socket) socket.close();
+  client.destroy();
+  process.exit(0);
+});
