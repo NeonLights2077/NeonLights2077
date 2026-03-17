@@ -591,7 +591,7 @@ const CHANNEL_CONFIG = [
       return `Spinner: *${data.user?.username || "Unknown"}* - ${data?.name}`;
     },
     condition: null,
-  }
+  },
 
 // TRADES
 
