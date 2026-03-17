@@ -161,7 +161,7 @@ const CHANNEL_CONFIG = [
       return `**${data.event.toUpperCase()}** | User: ${data.user?.username || "Unknown"} | Type: ${data.entity?.type || "N/A"} | Item: ${data.entity?.itemName || "N/A"} | Price: ${data.market?.price ? `${formatPrice(data.market.price)}` : "N/A"}`;
     },
     condition: (data) =>
-      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed"].includes(
+      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
         data.event,
       ),
   },
