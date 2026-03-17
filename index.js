@@ -175,7 +175,7 @@ const CHANNEL_CONFIG = [
       return `**${data.event.toUpperCase()}** | User: **${data.user?.username || "Unknown"}** | Data: \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1900)}\`\`\``;
     },
     condition: (data) =>
-      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed"].includes(
+      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
         data.event,
       ),
   },
@@ -588,18 +588,59 @@ const CHANNEL_CONFIG = [
     id: "1423670126741426176",
     event: "spinner-feed",
     template: (data) => {
-      return `*${data.user?.username || "Unknown"}* received ${data?.name} from spinner`;
+      return `Spinner: *${data.user?.username || "Unknown"}* - ${data?.name}`;
+    },
+    condition: null,
+  }
+
+// TRADES
+
+  // accept
+  {
+    name: "TRADE-ACCEPTED",
+    id: "1483382452331479040",
+    event: "trade-accepted",
+    template: (data) => {
+      return `✅ Accepted | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
     },
     condition: null,
   },
+
+  // sent
+  {
+    name: "TRADE-SENT",
+    id: "1483382452331479040",
+    //id: "1483382662579359915",
+    event: "trade-sent",
+    template: (data) => {
+      return `📤 Sent | to *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+    },
+    condition: null,
+  },
+ 
+  // decline
+  {
+    name: "TRADE-DECLINED",
+    id: "1483382452331479040",
+    //id: "1483382717784657952",
+    event: "trade-declined",
+    template: (data) => {
+      return `❌ Declined | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\`, was sent from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+    },
+    condition: null,
+  },  
+  
 ];
 
 // WebSocket Management
 let socket;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 10;
+const MAX_RECONNECT_ATTEMPTS = 20; // Increased max attempts
 let pingInterval;
+let heartbeatInterval;
 let reconnectTimeout;
+let lastMessageTime = Date.now();
+let connectionMonitorInterval;
 
 // ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
@@ -624,23 +665,24 @@ function generateWebSocketKey() {
 // ====================================================================
 
 function connectWebSocket() {
-  // Clear any existing reconnection timeout
+  // Clear any existing timeouts and intervals
   if (reconnectTimeout) {
     clearTimeout(reconnectTimeout);
     reconnectTimeout = null;
   }
-
-  // Clear existing ping interval
   if (pingInterval) {
     clearInterval(pingInterval);
     pingInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
   }
 
   const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
   
   console.log(`🔄 Attempting connection to: ${wsUrl} (Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
   
-  // Generate a proper WebSocket key like browsers do
   const wsKey = generateWebSocketKey();
   
   const options = {
@@ -668,14 +710,24 @@ function connectWebSocket() {
     sendToDebugChannel(`🟢 WebSocket Connected to Kolex.gg`);
     
     reconnectAttempts = 0;
+    lastMessageTime = Date.now();
     
-    // Set up ping interval
+    // Set up ping interval (every 15 seconds instead of 20)
     pingInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send("2");
         console.log("📤 Sent ping (2)");
       }
-    }, 20000); // Send ping every 20 seconds
+    }, 15000);
+    
+    // Set up heartbeat message to keep connection alive
+    heartbeatInterval = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        // Send a heartbeat message - some servers expect this
+        socket.send('42["heartbeat"]');
+        console.log("💓 Sent heartbeat");
+      }
+    }, 30000); // Every 30 seconds
     
     // Send join message after a short delay
     setTimeout(() => {
@@ -690,10 +742,14 @@ function connectWebSocket() {
     console.log(`🔴 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
     sendToDebugChannel(`🔴 WebSocket Disconnected (Code: ${code})`);
     
-    // Clear ping interval
+    // Clear intervals
     if (pingInterval) {
       clearInterval(pingInterval);
       pingInterval = null;
+    }
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
     }
     
     // Attempt to reconnect with exponential backoff
@@ -708,6 +764,7 @@ function connectWebSocket() {
   socket.on("message", (rawData) => {
     try {
       const data = rawData.toString();
+      lastMessageTime = Date.now(); // Update last message time
       
       // Handle Socket.io ping/pong
       if (data === "2") {
@@ -774,8 +831,8 @@ function scheduleReconnect() {
     return;
   }
   
-  // Exponential backoff: 5s, 10s, 20s, 40s, 80s, etc.
-  const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000); // Max 5 minutes
+  // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, etc. Max 5 minutes
+  const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000);
   console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
   
   reconnectTimeout = setTimeout(() => {
@@ -836,6 +893,18 @@ client.on("ready", () => {
   setTimeout(() => {
     connectWebSocket();
   }, 2000);
+  
+  // Start connection monitor
+  connectionMonitorInterval = setInterval(() => {
+    const timeSinceLastMessage = Date.now() - lastMessageTime;
+    
+    // If no messages for 2 minutes, force reconnect
+    if (timeSinceLastMessage > 120000 && socket?.readyState === WebSocket.OPEN) {
+      console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
+      sendToDebugChannel(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, reconnecting...`);
+      socket.close();
+    }
+  }, 30000); // Check every 30 seconds
 });
 
 client.on("error", (error) => {
@@ -845,11 +914,21 @@ client.on("error", (error) => {
 
 // Health check server
 const server = http.createServer((req, res) => {
+  const timeSinceLastMessage = Date.now() - lastMessageTime;
+  const wsStatus = socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected';
+  const wsState = socket?.readyState;
+  
   res.writeHead(200, { 
     'Content-Type': 'text/plain',
     'Connection': 'keep-alive'
   });
-  res.end(`Bot is running\nWebSocket: ${socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected'}\nUptime: ${process.uptime()}s`);
+  res.end(`Bot Status:
+- WebSocket: ${wsStatus} (State: ${wsState})
+- Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
+- Reconnect Attempts: ${reconnectAttempts}
+- Uptime: ${Math.round(process.uptime() / 60)} minutes
+- Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB
+`);
 });
 server.keepAliveTimeout = 60000; // 60 seconds
 server.listen(8080, '0.0.0.0', () => {
@@ -872,6 +951,8 @@ client.login(process.env.TOKEN).catch((err) => {
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
   if (pingInterval) clearInterval(pingInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
   if (socket) socket.close();
   client.destroy();
@@ -881,6 +962,8 @@ process.on('SIGTERM', () => {
 process.on('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully...');
   if (pingInterval) clearInterval(pingInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
   if (reconnectTimeout) clearTimeout(reconnectTimeout);
   if (socket) socket.close();
   client.destroy();
