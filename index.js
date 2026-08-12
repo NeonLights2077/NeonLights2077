@@ -31,8 +31,7 @@ const KL_KEYWORDS = [
 ];
 
 const KL_HERO = [
-  " Hero ",
-  "2025 Art Series Team Kit"
+  " Hero "
 ];
 
 const EWC_PACKS = new Set([
@@ -74,7 +73,8 @@ const EWC_PACKS = new Set([
 
 //filter for EWC
 const EWC_KEYWORDS = [
-  "EWC"
+  "EWC",
+"First Edition"
 ];
 
 const KL_PACKS = new Set([
@@ -789,7 +789,6 @@ const CHANNEL_CONFIG = [
   {
     name: "TRADE-SENT",
     id: "1483382452331479040",
-    //id: "1483382662579359915",
     event: "trade-sent",
     template: (data) => {
       return `📤 Sent | to *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
@@ -801,7 +800,6 @@ const CHANNEL_CONFIG = [
   {
     name: "TRADE-DECLINED",
     id: "1483382452331479040",
-    //id: "1483382717784657952",
     event: "trade-declined",
     template: (data) => {
       return `❌ Declined | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\`, was sent from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
