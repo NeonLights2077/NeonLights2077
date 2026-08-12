@@ -26,7 +26,8 @@ const KL_KEYWORDS = [
   //"Kings League Spain",
   //"Kings League Italy",
   "Kings League",
-  "Queens League"
+  "Queens League",
+  "Kings World"
 ];
 
 const KL_HERO = [
@@ -34,57 +35,102 @@ const KL_HERO = [
   "2025 Art Series Team Kit"
 ];
 
-const KL_MYTH = [
-  "Mythic"
+const EWC_PACKS = new Set([
+"APXL: Jul 07 - 11 Gold",
+"APXL: Jul 07 - 11 Premium",
+"CHESS: Aug 11 - 15 Gold",
+"CHESS: Aug 11 - 15 Premium",
+"DT2: Jul 07 - 19 Gold",
+"DT2: Jul 07 - 19 Premium",
+"ESFC: Jul 22 - 26 Gold",
+"ESFC: Jul 22 - 26 Premium",
+"FFY: Jul 08 - 11 Gold",
+"FFY: Jul 08 - 11 Premium",
+"FRF: Jul 15 - 18 Gold",
+"FRF: Jul 15 - 18 Premium",
+"HNK: Jul 30 - Aug 08 Gold",
+"HNK: Jul 30 - Aug 08 Premium",
+"LGL: Jul 15 - 19 Gold",
+"LGL: Jul 15 - 19 Premium",
+"MBL: Jul 22 - Aug 01 Gold",
+"MBL: Jul 22 - Aug 01 Premium",
+"MBLW: Jul 14 - 18 Gold",
+"MBLW: Jul 14 - 18 Premium",
+"PBGB: Jul 21 - 26 Gold",
+"PBGB: Jul 21 - 26 Premium",
+"PBGM: Aug 06 - 16 Gold",
+"PBGM: Aug 06 - 16 Premium",
+"R6S: Aug 04 - 15 Gold",
+"R6S: Aug 04 - 15 Premium",
+"STF6: Jul 29 - Aug 01 Gold",
+"STF6: Jul 29 - Aug 01 Premium",
+"TK8: Aug 05 - 08 Gold",
+"TK8: Aug 05 - 08 Premium",
+"TMFT: Jul 21 - 25 Gold",
+"TMFT: Jul 21 - 25 Premium",
+"VLRT: Jul 02 - 12 Gold",
+"VLRT: Jul 02 - 12 Premium"
+]);
+
+//filter for EWC
+const EWC_KEYWORDS = [
+  "EWC"
 ];
 
 const KL_PACKS = new Set([
 "Campeón: Split 3",
 "Kings Cup America Champions",
+"Kings Cup Brazil",
 "Kings Cup Brazil Prestige",
 "Kings Cup Brazil Rewards",
-"Kings Cup Brazil",
 "Kings Cup Europe Champions",
-"Kings Cup Germany Prestige",
+"Kings Cup Germany",
 "Kings Cup Germany Prestige",
 "Kings Cup Germany Reward",
-"Kings Cup Germany",
-"Kings Cup Germany",
+"Kings Cup Italy",
 "Kings Cup Italy Prestige",
 "Kings Cup Italy Reward",
-"Kings Cup Italy",
+"Kings Cup MENA",
 "Kings Cup MENA Prestige",
 "Kings Cup MENA Reward",
-"Kings Cup MENA",
+"Kings Cup Mexico",
 "Kings Cup Mexico Prestige",
 "Kings Cup Mexico Reward",
-"Kings Cup Mexico",
-"Kings Cup Spain Coentrão Prestige",
+"Kings Cup Spain",
 "Kings Cup Spain Coentrão",
+"Kings Cup Spain Coentrão Prestige",
 "Kings Cup Spain Prestige",
 "Kings Cup Spain Reward",
-"Kings Cup Spain",
 "Kings League Brazil",
 "Kings League Brazil: Campeão",
 "Kings League Brazil: Prestige",
+"Kings League Brazil: Reward",
+"Kings League France",
 "Kings League France: Champion",
+"Kings League France: Reward",
 "Kings League Germany",
 "Kings League Germany: Champions",
 "Kings League Germany: Prestige",
+"Kings League Germany: Reward",
+"Kings League Italy",
 "Kings League Italy G9",
 "Kings League Italy G9: Prestige",
-"Kings League Italy",
 "Kings League Italy: Prestige",
 "Kings League Mexico",
 "Kings League Mexico: Campeón",
 "Kings League Mexico: Prestige",
+"Kings League Mexico: Reward",
 "Kings League Spain",
 "Kings League Spain: Campeón",
 "Kings League Spain: Prestige",
+"Kings League Spain: Reward",
+"Kings World Cup Nations",
 "Kings World Cup Nations Champions",
 "Kings World Cup Nations Reward",
-"Kings World Cup Nations",
 "Kings World Cup Nations: Prestige",
+"KWCC",
+"KWCC: Prestige",
+"KWCC: Reward",
 "Oro 2023-24",
 "Oro 2024-25",
 "Oro+ 2024-25",
@@ -98,14 +144,17 @@ const KL_PACKS = new Set([
 "Platino 2024-25",
 "Platino+ 2024-25",
 "Queens Cup Champions",
+"Queens Cup Mexico",
 "Queens Cup Mexico Prestige",
 "Queens Cup Mexico Reward",
-"Queens Cup Mexico",
+"Queens Cup Spain",
 "Queens Cup Spain Prestige",
 "Queens Cup Spain Reward",
-"Queens Cup Spain",
+"Queens League Mexico",
 "Queens League Mexico: Campeón",
+"Queens League Mexico: Reward",
 "Queens League Spain",
+"Queens League Spain: Campeón",
 "Queens League Spain: Prestige",
 "S5 Rewards 2024-25",
 "S5 Wild Cards Cuartos",
@@ -202,7 +251,8 @@ const CHANNEL_CONFIG = [
       ).join("\n");
     },
     condition: (data) => data.cards?.some(card => card.mintNumber <= 30) &&
-      !KL_PACKS.has(data?.packName),
+      !KL_PACKS.has(data?.packName) && 
+	  !EWC_PACKS.has(data?.packName),
   },
 
   // Market listings (cards/stickers < #20)
@@ -216,8 +266,9 @@ const CHANNEL_CONFIG = [
     condition: (data) => {
       const name = data.entity?.itemName || "";
       return ["card", "sticker"].includes(data.entity?.type) &&
-        data.entity?.mintNumber < 20 &&
-        !KL_KEYWORDS.some(kw => name.includes(kw));
+        data.entity?.mintNumber < 21 &&
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
 
@@ -234,7 +285,8 @@ const CHANNEL_CONFIG = [
       return ["card", "sticker"].includes(data.entity?.type) &&
         data.entity?.mintNumber < 101 &&
         data.entity?.mintNumber > 20 &&
-        !KL_KEYWORDS.some(kw => name.includes(kw));
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
 
@@ -247,21 +299,23 @@ const CHANNEL_CONFIG = [
       return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
     },
     condition: (data) => data.entity?.type === "pack" &&
-      parseFloat(data.market?.price) > 0.15 &&
-      !KL_PACKS.has(data.entity?.itemName),
+      parseFloat(data.market?.price) > 0.30 &&
+      !KL_PACKS.has(data.entity?.itemName) && 
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
   
-  // Pack listings for less than 15 cent
+  // Pack listings for less than 30 cent
   {
-    name: "listed-packs-15c",
+    name: "listed-packs-30c",
     id: "1423667054317277235",
     event: "market-list",
     template: (data) => {
       return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
     },
     condition: (data) => data.entity?.type === "pack" &&
-      parseFloat(data.market?.price) <= 0.15 &&
-      !KL_PACKS.has(data.entity?.itemName),
+      parseFloat(data.market?.price) <= 0.30 &&
+      !KL_PACKS.has(data.entity?.itemName) && 
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
 
   // All listings
@@ -275,7 +329,8 @@ const CHANNEL_CONFIG = [
     condition: (data) => {
       const name = data.entity?.itemName || "";
       return !["pack", "bundle"].includes(data.entity?.type) &&
-        !KL_KEYWORDS.some(kw => name.includes(kw));
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
 
@@ -291,7 +346,8 @@ const CHANNEL_CONFIG = [
       const name = data.entity?.itemName || "";
       return ["card", "sticker"].includes(data.entity?.type) &&
         parseFloat(data.market?.price) >= 1 &&
-        !KL_KEYWORDS.some(kw => name.includes(kw));
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
 
@@ -305,7 +361,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
-      !KL_PACKS.has(data.entity?.itemName),
+      !KL_PACKS.has(data.entity?.itemName) && 
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
   
   // Pack sales for 10 cents
@@ -318,7 +375,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
-      !KL_PACKS.has(data.entity?.itemName),
+      !KL_PACKS.has(data.entity?.itemName) && 
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
 
   // All sales (non-pack/bundle)
@@ -332,7 +390,8 @@ const CHANNEL_CONFIG = [
     condition: (data) => {
       const name = data.entity?.itemName || "";
       return !["pack", "bundle"].includes(data.entity?.type) &&
-        !KL_KEYWORDS.some(kw => name.includes(kw));
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
  
@@ -482,6 +541,148 @@ const CHANNEL_CONFIG = [
     }
   },
 
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  
+  
+  
+  // EWC Pack opened events (mintNumber <= 50)
+  {
+    name: "ewc-feed-50",
+    id: "1483382717784657952",
+    event: "pack-opened",
+    template: (data) => {
+      const matchingCards = data.cards?.filter(card => card.mintNumber <= 50) || [];
+      if (matchingCards.length === 0) return null;
+      return matchingCards.map(card => 
+        `**${card.mintBatch || "N/A"}${card.mintNumber || "N/A"}** ${card.title || "Unknown"} opened by: *${data.user?.username || "Unknown"}* - Pack ID ${data?.id} - ${data?.packName}`
+      ).join("\n");
+    },
+    condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
+      EWC_PACKS.has(data?.packName),
+  },
+
+  // EWC Pack opened events (mintNumber > 50)
+  {
+    name: "ewc-feed-rest",
+    id: "1483382662579359915",
+    event: "pack-opened",
+    template: (data) => {
+      const matchingCards = data.cards?.filter(card => card.mintNumber > 50) || [];
+      if (matchingCards.length === 0) return null;
+      return matchingCards.map(card => 
+        `**${card.mintBatch || "N/A"}${card.mintNumber || "N/A"}** ${card.title || "Unknown"} opened by: *${data.user?.username || "Unknown"}* - Pack ID ${data?.id} - ${data?.packName}`
+      ).join("\n");
+    },
+    condition: (data) => data.cards?.some(card => card.mintNumber > 50) &&
+      EWC_PACKS.has(data?.packName),
+  },
+
+
+  // EWC Market listings (cards/stickers < #100)
+  {
+    name: "ewc-listed-100",
+    id: "1537051210677354566",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        data.entity?.mintNumber < 101 &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // EWC Pack listings
+  {
+    name: "ewc-listed-packs",
+    id: "1537051327740379157",
+    event: "market-list",
+    template: (data) => {
+      return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      EWC_PACKS.has(data.entity?.itemName),
+  },
+  
+  // EWC All listings
+  {
+    name: "ewc-listed-all-cards",
+    id: "1537051421365633075",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+
+  // EWC Sales ≥ $2
+  {
+    name: "ewc-sold-2-usd",
+    id: "1537051491322568704",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        parseFloat(data.market?.price) >= 2 &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // EWC Pack sales
+  {
+    name: "ewc-sold-packs",
+    id: "1537051524436332595",
+    event: "market-sold",
+    template: (data) => {
+      return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      EWC_PACKS.has(data.entity?.itemName),
+  },
+ 
+
+  // EWC sales all
+  {
+    name: "EWC-sold-all",
+    id: "1537051558884286535",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+  
+  
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+
+
+
   // Bundle listings
   {
     name: "list-bundle",
@@ -514,7 +715,7 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) =>
       ["card", "sticker"].includes(data.entity?.type) &&
-      data.entity?.mintNumber < 20 &&
+      data.entity?.mintNumber < 21 &&
       parseFloat(data.market?.price) <= 0.51,
   },
 
@@ -546,38 +747,8 @@ const CHANNEL_CONFIG = [
       parseFloat(data.market?.price) <= 0.15,
   },
   
-  // KL Listings < #150 and ≤ $0.40
-  {
-    name: "kl-list150-less-40",
-    id: "1433055346578161756",
-    event: "market-list",
-    template: (data) => {
-      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
-    },
-    condition: (data) => {
-      const name = data.entity?.itemName || "";
-      return !["pack", "bundle"].includes(data.entity?.type) &&
-        data.entity?.mintNumber < 150 &&
-        parseFloat(data.market?.price) <= 0.41 &&
-        KL_KEYWORDS.some(kw => name.includes(kw));
-    }
-  },
-  
-  // KL Listings HERO and ≤ $20
-  {
-    name: "kl-list-hero-less-20usd",
-    id: "1433055528900235324",
-    event: "market-list",
-    template: (data) => {
-      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
-    },
-    condition: (data) => {
-      const name = data.entity?.itemName || "";
-      return !["pack", "bundle"].includes(data.entity?.type) &&
-        parseFloat(data.market?.price) <= 20 &&
-        KL_HERO.some(kw => name.includes(kw));
-    }
-  },
+
+ 
 
   // Store purchases
   {
