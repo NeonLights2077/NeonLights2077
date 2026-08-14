@@ -43,6 +43,10 @@ const EWC_PACKS = new Set([
 "CWZ: Jul 30 - Aug 02 Premium",
 "CHESS: Aug 11 - 15 Gold",
 "CHESS: Aug 11 - 15 Premium",
+"CS2: Aug 19 - 23 Gold",
+"CS2: Aug 19 - 23 Premium",
+"RCKL: Aug 12 - 16 Gold",
+"RCKL: Aug 12 - 16 Premium",
 "DT2: Jul 07 - 19 Gold",
 "DT2: Jul 07 - 19 Premium",
 "ESFC: Jul 22 - 26 Gold",
@@ -85,6 +89,7 @@ const EWC_KEYWORDS = [
 
 const KL_PACKS = new Set([
 "Campeón: Split 3",
+"KWCC: Champions Reward",
 "Kings Cup America Champions",
 "Kings Cup Brazil",
 "Kings Cup Brazil Prestige",
