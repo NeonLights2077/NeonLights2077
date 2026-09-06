@@ -850,6 +850,7 @@ let connectionMonitorInterval;
 let wsConnectionTimeout;
 let wsConnectionStartTime;
 let isReconnecting = false;
+let isJoined = false;
 
 // ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
@@ -858,7 +859,7 @@ function formatPrice(price) {
 }
 
 function shouldProcessEvent(eventName) {
-  const SKIP_EVENTS = ["join-public-feed"];
+  const SKIP_EVENTS = ["join-public-feed", "heartbeat"];
   return !SKIP_EVENTS.includes(eventName);
 }
 
@@ -872,7 +873,6 @@ function generateWebSocketKey() {
 }
 
 function cleanupSocket() {
-  // Clear all intervals and timeouts
   if (pingInterval) {
     clearInterval(pingInterval);
     pingInterval = null;
@@ -890,15 +890,13 @@ function cleanupSocket() {
     reconnectTimeout = null;
   }
   
-  // Close socket if it exists
   if (socket) {
     try {
       socket.terminate();
-    } catch (e) {
-      // Ignore
-    }
+    } catch (e) {}
     socket = null;
   }
+  isJoined = false;
 }
 
 function scheduleReconnect() {
@@ -924,7 +922,6 @@ function scheduleReconnect() {
 
 // ======================= MAIN WEBSOCKET CONNECTION =======================
 function connectWebSocket() {
-  // Clean up any existing connection
   cleanupSocket();
   isReconnecting = false;
 
@@ -955,17 +952,11 @@ function connectWebSocket() {
   socket = new WebSocket(wsUrl, options);
   wsConnectionStartTime = Date.now();
 
-  // Connection timeout - if we don't get 'open' within 15 seconds, force reconnect
   wsConnectionTimeout = setTimeout(() => {
     if (socket && socket.readyState !== WebSocket.OPEN) {
       console.error("❌ WebSocket connection timeout - forcing reconnect");
       sendToDebugChannel("❌ WebSocket connection timeout - reconnecting...");
-      if (socket) {
-        try {
-          socket.terminate();
-        } catch (e) {}
-        socket = null;
-      }
+      cleanupSocket();
       scheduleReconnect();
     }
   }, 15000);
@@ -980,8 +971,8 @@ function connectWebSocket() {
     reconnectAttempts = 0;
     lastMessageTime = Date.now();
     isReconnecting = false;
+    isJoined = false;
     
-    // Set up ping interval
     pingInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send("2");
@@ -989,7 +980,6 @@ function connectWebSocket() {
       }
     }, 15000);
     
-    // Set up heartbeat message
     heartbeatInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send('42["heartbeat"]');
@@ -997,12 +987,9 @@ function connectWebSocket() {
       }
     }, 30000);
     
-    // Send join message after a short delay
+    // Send join message with delay and retry
     setTimeout(() => {
-      if (socket?.readyState === WebSocket.OPEN) {
-        socket.send('42["join-public-feed"]');
-        console.log("📤 Sent join-public-feed message");
-      }
+      sendJoinMessage();
     }, 1000);
   });
 
@@ -1013,6 +1000,7 @@ function connectWebSocket() {
     console.log(`🔴 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
     sendToDebugChannel(`🔴 WebSocket Disconnected (Code: ${code})`);
     
+    isJoined = false;
     cleanupSocket();
     scheduleReconnect();
   });
@@ -1021,16 +1009,10 @@ function connectWebSocket() {
     console.error(`WebSocket Error:`, err.message);
     sendToDebugChannel(`❗ WebSocket Error: ${err.message}`);
     
-    // If we get an error and socket isn't open, force reconnect
     if (socket && socket.readyState !== WebSocket.OPEN) {
       clearTimeout(wsConnectionTimeout);
       wsConnectionTimeout = null;
-      if (socket) {
-        try {
-          socket.terminate();
-        } catch (e) {}
-        socket = null;
-      }
+      cleanupSocket();
       scheduleReconnect();
     }
   });
@@ -1043,7 +1025,6 @@ function connectWebSocket() {
       // Handle Socket.io ping/pong
       if (data === "2") {
         socket.send("3");
-        console.log("📤 Sent pong (3)");
         return;
       }
 
@@ -1071,6 +1052,13 @@ function connectWebSocket() {
           if (Array.isArray(parsed) && parsed.length >= 2) {
             const [eventName, eventData] = parsed;
             
+            // Check if this is the join response
+            if (eventName === "join-public-feed") {
+              console.log("✅ Successfully joined public feed");
+              isJoined = true;
+              return;
+            }
+            
             if (eventName && eventData) {
               eventData.event = eventName;
               
@@ -1094,6 +1082,26 @@ function connectWebSocket() {
       sendToDebugChannel(`❌ Processing Error: ${error.message}`);
     }
   });
+}
+
+// Helper function to send join message with retry
+function sendJoinMessage() {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    console.log("⚠️ Cannot send join - socket not open");
+    return;
+  }
+  
+  socket.send('42["join-public-feed"]');
+  console.log("📤 Sent join-public-feed message");
+  
+  // If we don't get a response within 10 seconds, try again
+  setTimeout(() => {
+    if (!isJoined && socket && socket.readyState === WebSocket.OPEN) {
+      console.log("⚠️ No join confirmation received, retrying...");
+      socket.send('42["join-public-feed"]');
+      console.log("📤 Retry: Sent join-public-feed message");
+    }
+  }, 10000);
 }
 
 function processEventChannels(eventData) {
@@ -1147,11 +1155,18 @@ client.on("ready", () => {
     connectWebSocket();
   }, 2000);
   
-  // Connection monitor - checks if we're stuck
   connectionMonitorInterval = setInterval(() => {
     const timeSinceLastMessage = Date.now() - lastMessageTime;
     
-    // If no messages for 2 minutes and socket is supposed to be open
+    // If we haven't joined within 30 seconds of connection, retry
+    if (!isJoined && socket && socket.readyState === WebSocket.OPEN) {
+      const elapsed = Date.now() - wsConnectionStartTime;
+      if (elapsed > 30000) {
+        console.log("⚠️ Still not joined after 30s, retrying join...");
+        sendJoinMessage();
+      }
+    }
+    
     if (timeSinceLastMessage > 120000) {
       if (socket && socket.readyState === WebSocket.OPEN) {
         console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
@@ -1164,7 +1179,6 @@ client.on("ready", () => {
       }
     }
     
-    // Check if socket is stuck in connecting state
     if (socket && socket.readyState === WebSocket.CONNECTING) {
       const elapsed = Date.now() - wsConnectionStartTime;
       if (elapsed > 30000) {
@@ -1187,7 +1201,6 @@ const server = http.createServer((req, res) => {
   const wsStatus = socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected';
   const wsState = socket?.readyState;
   
-  // If socket is disconnected, attempt to reconnect
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     if (!isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       console.log("🔄 Health check triggered reconnect");
@@ -1201,6 +1214,7 @@ const server = http.createServer((req, res) => {
   });
   res.end(`Bot Status:
 - WebSocket: ${wsStatus} (State: ${wsState})
+- Joined Feed: ${isJoined}
 - Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
 - Reconnect Attempts: ${reconnectAttempts}
 - Is Reconnecting: ${isReconnecting}
