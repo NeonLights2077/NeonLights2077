@@ -1201,7 +1201,39 @@ client.login(process.env.TOKEN)
     console.error("❌ Full error:", JSON.stringify(err, null, 2));
     process.exit(1);
   });
+// ======================= VALIDATE AND LOGIN =======================
+if (!process.env.TOKEN) {
+  console.error("❌ No Discord token found in environment variables!");
+  process.exit(1);
+}
 
+console.log("🔑 Attempting to login to Discord...");
+console.log(`🔑 Token length: ${process.env.TOKEN.length} characters`);
+console.log(`🔑 Token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
+
+// Force the bot to use API v10
+client.rest.setBaseURL('https://discord.com/api/v10');
+
+const loginTimeout = setTimeout(() => {
+  console.error("❌ Discord login TIMEOUT - No response after 10 seconds!");
+  console.error("❌ Please check your TOKEN environment variable");
+  console.error(`❌ Current token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
+  console.error("❌ Make sure you copied the Bot Token, not the Client ID or Client Secret");
+  console.error("❌ If token is correct, Render may be blocked by Discord");
+  process.exit(1);
+}, 15000);
+
+client.login(process.env.TOKEN)
+  .then(() => {
+    clearTimeout(loginTimeout);
+    console.log("✅ Discord login successful");
+  })
+  .catch((err) => {
+    clearTimeout(loginTimeout);
+    console.error("❌ Login error:", err);
+    console.error("❌ Full error:", JSON.stringify(err, null, 2));
+    process.exit(1);
+  });
 // ======================= GRACEFUL SHUTDOWN =======================
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
