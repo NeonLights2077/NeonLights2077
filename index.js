@@ -2,12 +2,13 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const WebSocket = require("ws");
 const http = require("http");
 
-// Discord Client Setup
+// Discord Client Setup with more options
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
   ],
 });
 
@@ -852,6 +853,9 @@ let wsConnectionStartTime;
 let isReconnecting = false;
 let isJoined = false;
 let receivedDataEvents = 0;
+let discordReady = false;
+let discordChannelCache = {};
+let lastDiscordSendAttempt = 0;
 
 // ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
@@ -1133,23 +1137,87 @@ function processEventChannels(eventData) {
   });
 }
 
+// ======================= IMPROVED DISCORD SEND FUNCTION =======================
 function sendToChannel(channelId, message) {
   if (!message) return;
   
-  const channel = client.channels.cache.get(channelId);
-  if (channel) {
-    if (message.length > 2000) {
-      const chunks = message.match(/.{1,1900}/g) || [];
-      chunks.forEach(chunk => {
-        channel.send(chunk).catch((err) => {
-          console.error(`Error sending to channel ${channelId}:`, err);
+  // Check if Discord is ready
+  if (!discordReady) {
+    console.log(`⚠️ Discord not ready, cannot send to ${channelId}`);
+    return;
+  }
+  
+  // Check if channel is in cache
+  let channel = client.channels.cache.get(channelId);
+  
+  if (!channel) {
+    console.log(`❌ Channel ${channelId} not found in cache, attempting to fetch...`);
+    // Try to fetch the channel
+    client.channels.fetch(channelId)
+      .then(fetchedChannel => {
+        if (fetchedChannel) {
+          console.log(`✅ Channel ${channelId} fetched successfully`);
+          discordChannelCache[channelId] = fetchedChannel;
+          // Try sending now
+          sendToChannel(channelId, message);
+        } else {
+          console.log(`❌ Channel ${channelId} not found`);
+          // Try to send to debug channel instead
+          const debugChannel = client.channels.cache.get(DEBUG_CHANNEL_ID);
+          if (debugChannel) {
+            debugChannel.send(`❌ Channel ${channelId} not found - check bot permissions\nOriginal message: ${message.substring(0, 1000)}`)
+              .catch(err => console.error("Error sending debug message:", err.message));
+          }
+        }
+      })
+      .catch(err => {
+        console.error(`❌ Failed to fetch channel ${channelId}:`, err.message);
+      });
+    return;
+  }
+  
+  // Send the message
+  if (message.length > 2000) {
+    const chunks = message.match(/.{1,1900}/g) || [];
+    chunks.forEach((chunk, index) => {
+      channel.send(chunk)
+        .then(() => {
+          lastDiscordSendAttempt = Date.now();
+          console.log(`✅ Sent to ${channelId} (part ${index + 1}/${chunks.length})`);
+        })
+        .catch((err) => {
+          console.error(`❌ Error sending to channel ${channelId}:`, err.message);
+          if (err.code === 50001) {
+            console.log(`❌ Missing Access to channel ${channelId} - check bot permissions`);
+          } else if (err.code === 10003) {
+            console.log(`❌ Unknown Channel ${channelId}`);
+          } else if (err.code === 50013) {
+            console.log(`❌ Missing Permissions for channel ${channelId}`);
+          }
         });
+    });
+  } else {
+    channel.send(message)
+      .then(() => {
+        lastDiscordSendAttempt = Date.now();
+        console.log(`✅ Sent to ${channelId}`);
+      })
+      .catch((err) => {
+        console.error(`❌ Error sending to channel ${channelId}:`, err.message);
+        if (err.code === 50001) {
+          console.log(`❌ Missing Access to channel ${channelId} - check bot permissions`);
+          // Try to send a test message to debug channel
+          const debugChannel = client.channels.cache.get(DEBUG_CHANNEL_ID);
+          if (debugChannel) {
+            debugChannel.send(`❌ Missing Access to channel ${channelId}. Please re-invite the bot with proper permissions.`)
+              .catch(e => console.error("Error sending debug message:", e.message));
+          }
+        } else if (err.code === 10003) {
+          console.log(`❌ Unknown Channel ${channelId}`);
+        } else if (err.code === 50013) {
+          console.log(`❌ Missing Permissions for channel ${channelId}`);
+        }
       });
-    } else {
-      channel.send(message).catch((err) => {
-        console.error(`Error sending to channel ${channelId}:`, err);
-      });
-    }
   }
 }
 
@@ -1160,11 +1228,33 @@ function sendToDebugChannel(message) {
 // ======================= BOT STARTUP =======================
 client.on("ready", () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
-  sendToDebugChannel("🤖 Bot started successfully");
+  console.log(`📊 Bot is in ${client.guilds.cache.size} guild(s)`);
+  discordReady = true;
+  
+  // Pre-cache all channels
+  client.guilds.cache.forEach(guild => {
+    console.log(`📊 In guild: ${guild.name} (${guild.id})`);
+    guild.channels.cache.forEach(channel => {
+      discordChannelCache[channel.id] = channel;
+      if (channel.id === DEBUG_CHANNEL_ID || channel.id === CATCH_ALL_CHANNEL_ID) {
+        console.log(`📊 Found target channel: ${channel.name} (${channel.id})`);
+      }
+    });
+  });
+  
+  // Send test message to debug channel
+  sendToDebugChannel(`🤖 Bot started successfully in ${client.guilds.cache.size} guilds`);
   
   setTimeout(() => {
     connectWebSocket();
   }, 2000);
+  
+  // Log channel cache status every minute
+  setInterval(() => {
+    if (receivedDataEvents > 0) {
+      console.log(`📊 Discord Status: Ready=${discordReady}, Channels=${Object.keys(discordChannelCache).length}, Events=${receivedDataEvents}, LastSend=${Math.round((Date.now() - lastDiscordSendAttempt)/1000)}s ago`);
+    }
+  }, 60000);
   
   connectionMonitorInterval = setInterval(() => {
     const timeSinceLastMessage = Date.now() - lastMessageTime;
@@ -1175,12 +1265,6 @@ client.on("ready", () => {
         console.log("⚠️ Still not joined after 30s, retrying join...");
         sendJoinMessage();
       }
-    }
-    
-    // Log status every minute
-    const now = new Date();
-    if (now.getSeconds() === 0) {
-      console.log(`📊 Status: Joined=${isJoined}, Events=${receivedDataEvents}, LastMsg=${Math.round(timeSinceLastMessage/1000)}s`);
     }
     
     if (timeSinceLastMessage > 120000) {
@@ -1208,7 +1292,26 @@ client.on("ready", () => {
 
 client.on("error", (error) => {
   console.error("Discord client error:", error);
-  sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
+  if (sendToDebugChannel) {
+    sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
+  }
+});
+
+client.on("disconnect", (event) => {
+  console.log(`🔴 Discord disconnected:`, event);
+  discordReady = false;
+  sendToDebugChannel(`🔴 Discord disconnected`);
+});
+
+client.on("reconnecting", () => {
+  console.log(`🔄 Discord reconnecting...`);
+  sendToDebugChannel(`🔄 Discord reconnecting...`);
+});
+
+client.on("resume", () => {
+  console.log(`🟢 Discord resumed`);
+  discordReady = true;
+  sendToDebugChannel(`🟢 Discord resumed`);
 });
 
 // ======================= HEALTH CHECK SERVER =======================
@@ -1229,10 +1332,13 @@ const server = http.createServer((req, res) => {
     'Connection': 'keep-alive'
   });
   res.end(`Bot Status:
+- Discord Ready: ${discordReady}
+- Discord Channels Cached: ${Object.keys(discordChannelCache).length}
 - WebSocket: ${wsStatus} (State: ${wsState})
 - Joined Feed: ${isJoined}
 - Events Received: ${receivedDataEvents}
 - Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
+- Last Discord Send: ${Math.round((Date.now() - lastDiscordSendAttempt)/1000)}s ago
 - Reconnect Attempts: ${reconnectAttempts}
 - Is Reconnecting: ${isReconnecting}
 - Uptime: ${Math.round(process.uptime() / 60)} minutes
@@ -1250,10 +1356,16 @@ if (!process.env.TOKEN) {
   process.exit(1);
 }
 
-client.login(process.env.TOKEN).catch((err) => {
-  console.error("Login error:", err);
-  process.exit(1);
-});
+console.log("🔑 Attempting to login to Discord...");
+client.login(process.env.TOKEN)
+  .then(() => {
+    console.log("✅ Discord login successful");
+  })
+  .catch((err) => {
+    console.error("❌ Login error:", err);
+    console.error("❌ Full error:", JSON.stringify(err, null, 2));
+    process.exit(1);
+  });
 
 // ======================= GRACEFUL SHUTDOWN =======================
 process.on('SIGTERM', () => {
