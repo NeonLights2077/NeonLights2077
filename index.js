@@ -1357,11 +1357,25 @@ if (!process.env.TOKEN) {
 }
 
 console.log("🔑 Attempting to login to Discord...");
+console.log(`🔑 Token length: ${process.env.TOKEN.length} characters`);
+console.log(`🔑 Token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
+
+// Force a timeout to see if login is hanging
+const loginTimeout = setTimeout(() => {
+  console.error("❌ Discord login TIMEOUT - No response after 10 seconds!");
+  console.error("❌ Please check your TOKEN environment variable");
+  console.error(`❌ Current token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
+  console.error("❌ Make sure you copied the Bot Token, not the Client ID or Client Secret");
+  process.exit(1);
+}, 10000);
+
 client.login(process.env.TOKEN)
   .then(() => {
+    clearTimeout(loginTimeout);
     console.log("✅ Discord login successful");
   })
   .catch((err) => {
+    clearTimeout(loginTimeout);
     console.error("❌ Login error:", err);
     console.error("❌ Full error:", JSON.stringify(err, null, 2));
     process.exit(1);
