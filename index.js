@@ -851,6 +851,7 @@ let wsConnectionTimeout;
 let wsConnectionStartTime;
 let isReconnecting = false;
 let isJoined = false;
+let receivedDataEvents = 0;
 
 // ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
@@ -924,6 +925,7 @@ function scheduleReconnect() {
 function connectWebSocket() {
   cleanupSocket();
   isReconnecting = false;
+  receivedDataEvents = 0;
 
   const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
   
@@ -972,6 +974,7 @@ function connectWebSocket() {
     lastMessageTime = Date.now();
     isReconnecting = false;
     isJoined = false;
+    receivedDataEvents = 0;
     
     pingInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
@@ -987,7 +990,6 @@ function connectWebSocket() {
       }
     }, 30000);
     
-    // Send join message with delay and retry
     setTimeout(() => {
       sendJoinMessage();
     }, 1000);
@@ -1059,6 +1061,17 @@ function connectWebSocket() {
               return;
             }
             
+            // Log all events for debugging
+            if (eventName && !["heartbeat"].includes(eventName)) {
+              receivedDataEvents++;
+              console.log(`📨 Received event: ${eventName} (${receivedDataEvents} total)`);
+              
+              // Log a sample of the data for debugging
+              if (receivedDataEvents <= 5) {
+                console.log(`📊 Sample data:`, JSON.stringify(eventData).substring(0, 200));
+              }
+            }
+            
             if (eventName && eventData) {
               eventData.event = eventName;
               
@@ -1073,9 +1086,8 @@ function connectWebSocket() {
         return;
       }
       
-      if (data.length < 100) {
-        console.log("📨 Unknown message:", data);
-      }
+      // Log unknown messages
+      console.log("📨 Unknown message type:", data.substring(0, 100));
       
     } catch (error) {
       console.error("Error processing message:", error);
@@ -1094,7 +1106,6 @@ function sendJoinMessage() {
   socket.send('42["join-public-feed"]');
   console.log("📤 Sent join-public-feed message");
   
-  // If we don't get a response within 10 seconds, try again
   setTimeout(() => {
     if (!isJoined && socket && socket.readyState === WebSocket.OPEN) {
       console.log("⚠️ No join confirmation received, retrying...");
@@ -1158,13 +1169,18 @@ client.on("ready", () => {
   connectionMonitorInterval = setInterval(() => {
     const timeSinceLastMessage = Date.now() - lastMessageTime;
     
-    // If we haven't joined within 30 seconds of connection, retry
     if (!isJoined && socket && socket.readyState === WebSocket.OPEN) {
       const elapsed = Date.now() - wsConnectionStartTime;
       if (elapsed > 30000) {
         console.log("⚠️ Still not joined after 30s, retrying join...");
         sendJoinMessage();
       }
+    }
+    
+    // Log status every minute
+    const now = new Date();
+    if (now.getSeconds() === 0) {
+      console.log(`📊 Status: Joined=${isJoined}, Events=${receivedDataEvents}, LastMsg=${Math.round(timeSinceLastMessage/1000)}s`);
     }
     
     if (timeSinceLastMessage > 120000) {
@@ -1215,6 +1231,7 @@ const server = http.createServer((req, res) => {
   res.end(`Bot Status:
 - WebSocket: ${wsStatus} (State: ${wsState})
 - Joined Feed: ${isJoined}
+- Events Received: ${receivedDataEvents}
 - Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
 - Reconnect Attempts: ${reconnectAttempts}
 - Is Reconnecting: ${isReconnecting}
