@@ -2,13 +2,12 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const WebSocket = require("ws");
 const http = require("http");
 
-// Discord Client Setup with more options
+// Discord Client Setup
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
   ],
 });
 
@@ -24,6 +23,8 @@ const KL_KEYWORDS = [
   "Kings Cup",
   "Queens Cup",
   "KWC Nations",
+  //"Kings League Spain",
+  //"Kings League Italy",
   "Kings League",
   "Queens League",
   "Kings World"
@@ -312,7 +313,7 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.cards?.some(card => card.mintNumber <= 30) &&
       !KL_PACKS.has(data?.packName) && 
-      !EWC_PACKS.has(data?.packName),
+	  !EWC_PACKS.has(data?.packName),
   },
 
   // Market listings (cards/stickers < #20)
@@ -361,7 +362,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.30 &&
       !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
   
   // Pack listings for less than 30 cent
@@ -375,7 +376,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.30 &&
       !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
 
   // All listings
@@ -422,7 +423,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
       !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
   
   // Pack sales for 10 cents
@@ -436,7 +437,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
       !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+	  !EWC_PACKS.has(data.entity?.itemName),
   },
 
   // All sales (non-pack/bundle)
@@ -602,6 +603,15 @@ const CHANNEL_CONFIG = [
   },
 
   // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  // ======================= EWC Channels =======================
+  
+  
+  
   // EWC Pack opened events (mintNumber <= 50)
   {
     name: "ewc-feed-50",
@@ -633,6 +643,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.cards?.some(card => card.mintNumber > 50) &&
       EWC_PACKS.has(data?.packName),
   },
+
 
   // EWC Market listings (cards/stickers < #100)
   {
@@ -677,6 +688,7 @@ const CHANNEL_CONFIG = [
     }
   },
 
+
   // EWC Sales ≥ $2
   {
     name: "ewc-sold-2-usd",
@@ -705,6 +717,7 @@ const CHANNEL_CONFIG = [
       EWC_PACKS.has(data.entity?.itemName),
   },
  
+
   // EWC sales all
   {
     name: "EWC-sold-all",
@@ -719,6 +732,17 @@ const CHANNEL_CONFIG = [
         EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
+  
+  
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+  ////////////////////////////// END of EWC
+
+
 
   // Bundle listings
   {
@@ -783,6 +807,9 @@ const CHANNEL_CONFIG = [
       data.entity?.mintNumber < 100 &&
       parseFloat(data.market?.price) <= 0.15,
   },
+  
+
+ 
 
   // Store purchases
   {
@@ -807,6 +834,7 @@ const CHANNEL_CONFIG = [
   },
 
 // TRADES
+
   // accept
   {
     name: "TRADE-ACCEPTED",
@@ -817,6 +845,7 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },
+
   // sent
   {
     name: "TRADE-SENT",
@@ -827,6 +856,7 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },
+ 
   // decline
   {
     name: "TRADE-DECLINED",
@@ -837,25 +867,18 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },  
+  
 ];
 
 // WebSocket Management
 let socket;
 let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 20;
+const MAX_RECONNECT_ATTEMPTS = 20; // Increased max attempts
 let pingInterval;
 let heartbeatInterval;
 let reconnectTimeout;
 let lastMessageTime = Date.now();
 let connectionMonitorInterval;
-let wsConnectionTimeout;
-let wsConnectionStartTime;
-let isReconnecting = false;
-let isJoined = false;
-let receivedDataEvents = 0;
-let discordReady = false;
-let discordChannelCache = {};
-let lastDiscordSendAttempt = 0;
 
 // ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
@@ -864,7 +887,8 @@ function formatPrice(price) {
 }
 
 function shouldProcessEvent(eventName) {
-  const SKIP_EVENTS = ["join-public-feed", "heartbeat"];
+  // Skip these events completely
+  const SKIP_EVENTS = ["join-public-feed"];
   return !SKIP_EVENTS.includes(eventName);
 }
 
@@ -876,8 +900,14 @@ function generateWebSocketKey() {
   }
   return Buffer.from(key).toString("base64");
 }
+// ====================================================================
 
-function cleanupSocket() {
+function connectWebSocket() {
+  // Clear any existing timeouts and intervals
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
   if (pingInterval) {
     clearInterval(pingInterval);
     pingInterval = null;
@@ -886,50 +916,6 @@ function cleanupSocket() {
     clearInterval(heartbeatInterval);
     heartbeatInterval = null;
   }
-  if (wsConnectionTimeout) {
-    clearTimeout(wsConnectionTimeout);
-    wsConnectionTimeout = null;
-  }
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-  
-  if (socket) {
-    try {
-      socket.terminate();
-    } catch (e) {}
-    socket = null;
-  }
-  isJoined = false;
-}
-
-function scheduleReconnect() {
-  if (isReconnecting) return;
-  isReconnecting = true;
-  
-  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    console.log("❌ Max reconnection attempts reached");
-    sendToDebugChannel("❌ Max reconnection attempts reached - bot needs restart");
-    isReconnecting = false;
-    return;
-  }
-  
-  const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000);
-  console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
-  
-  reconnectTimeout = setTimeout(() => {
-    reconnectAttempts++;
-    isReconnecting = false;
-    connectWebSocket();
-  }, delay);
-}
-
-// ======================= MAIN WEBSOCKET CONNECTION =======================
-function connectWebSocket() {
-  cleanupSocket();
-  isReconnecting = false;
-  receivedDataEvents = 0;
 
   const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
   
@@ -956,30 +942,15 @@ function connectWebSocket() {
   };
 
   socket = new WebSocket(wsUrl, options);
-  wsConnectionStartTime = Date.now();
-
-  wsConnectionTimeout = setTimeout(() => {
-    if (socket && socket.readyState !== WebSocket.OPEN) {
-      console.error("❌ WebSocket connection timeout - forcing reconnect");
-      sendToDebugChannel("❌ WebSocket connection timeout - reconnecting...");
-      cleanupSocket();
-      scheduleReconnect();
-    }
-  }, 15000);
 
   socket.on("open", () => {
-    clearTimeout(wsConnectionTimeout);
-    wsConnectionTimeout = null;
-    
     console.log(`🟢 WebSocket Connected to ${wsUrl}`);
     sendToDebugChannel(`🟢 WebSocket Connected to Kolex.gg`);
     
     reconnectAttempts = 0;
     lastMessageTime = Date.now();
-    isReconnecting = false;
-    isJoined = false;
-    receivedDataEvents = 0;
     
+    // Set up ping interval (every 15 seconds instead of 20)
     pingInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send("2");
@@ -987,54 +958,61 @@ function connectWebSocket() {
       }
     }, 15000);
     
+    // Set up heartbeat message to keep connection alive
     heartbeatInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
+        // Send a heartbeat message - some servers expect this
         socket.send('42["heartbeat"]');
         console.log("💓 Sent heartbeat");
       }
-    }, 30000);
+    }, 30000); // Every 30 seconds
     
+    // Send join message after a short delay
     setTimeout(() => {
-      sendJoinMessage();
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send('42["join-public-feed"]');
+        console.log("📤 Sent join-public-feed message");
+      }
     }, 1000);
   });
 
   socket.on("close", (code, reason) => {
-    clearTimeout(wsConnectionTimeout);
-    wsConnectionTimeout = null;
-    
     console.log(`🔴 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
     sendToDebugChannel(`🔴 WebSocket Disconnected (Code: ${code})`);
     
-    isJoined = false;
-    cleanupSocket();
+    // Clear intervals
+    if (pingInterval) {
+      clearInterval(pingInterval);
+      pingInterval = null;
+    }
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    
+    // Attempt to reconnect with exponential backoff
     scheduleReconnect();
   });
 
   socket.on("error", (err) => {
     console.error(`WebSocket Error:`, err.message);
     sendToDebugChannel(`❗ WebSocket Error: ${err.message}`);
-    
-    if (socket && socket.readyState !== WebSocket.OPEN) {
-      clearTimeout(wsConnectionTimeout);
-      wsConnectionTimeout = null;
-      cleanupSocket();
-      scheduleReconnect();
-    }
   });
 
   socket.on("message", (rawData) => {
     try {
       const data = rawData.toString();
-      lastMessageTime = Date.now();
+      lastMessageTime = Date.now(); // Update last message time
       
       // Handle Socket.io ping/pong
       if (data === "2") {
         socket.send("3");
+        console.log("📤 Sent pong (3)");
         return;
       }
 
       if (data === "3") {
+        // Received pong, ignore
         return;
       }
 
@@ -1058,24 +1036,6 @@ function connectWebSocket() {
           if (Array.isArray(parsed) && parsed.length >= 2) {
             const [eventName, eventData] = parsed;
             
-            // Check if this is the join response
-            if (eventName === "join-public-feed") {
-              console.log("✅ Successfully joined public feed");
-              isJoined = true;
-              return;
-            }
-            
-            // Log all events for debugging
-            if (eventName && !["heartbeat"].includes(eventName)) {
-              receivedDataEvents++;
-              console.log(`📨 Received event: ${eventName} (${receivedDataEvents} total)`);
-              
-              // Log a sample of the data for debugging
-              if (receivedDataEvents <= 5) {
-                console.log(`📊 Sample data:`, JSON.stringify(eventData).substring(0, 200));
-              }
-            }
-            
             if (eventName && eventData) {
               eventData.event = eventName;
               
@@ -1090,8 +1050,10 @@ function connectWebSocket() {
         return;
       }
       
-      // Log unknown messages
-      console.log("📨 Unknown message type:", data.substring(0, 100));
+      // Log other message types for debugging
+      if (data.length < 100) {
+        console.log("📨 Unknown message:", data);
+      }
       
     } catch (error) {
       console.error("Error processing message:", error);
@@ -1100,23 +1062,21 @@ function connectWebSocket() {
   });
 }
 
-// Helper function to send join message with retry
-function sendJoinMessage() {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    console.log("⚠️ Cannot send join - socket not open");
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log("❌ Max reconnection attempts reached");
+    sendToDebugChannel("❌ Max reconnection attempts reached - bot needs restart");
     return;
   }
   
-  socket.send('42["join-public-feed"]');
-  console.log("📤 Sent join-public-feed message");
+  // Exponential backoff: 5s, 10s, 20s, 40s, 80s, 160s, etc. Max 5 minutes
+  const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000);
+  console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
   
-  setTimeout(() => {
-    if (!isJoined && socket && socket.readyState === WebSocket.OPEN) {
-      console.log("⚠️ No join confirmation received, retrying...");
-      socket.send('42["join-public-feed"]');
-      console.log("📤 Retry: Sent join-public-feed message");
-    }
-  }, 10000);
+  reconnectTimeout = setTimeout(() => {
+    reconnectAttempts++;
+    connectWebSocket();
+  }, delay);
 }
 
 function processEventChannels(eventData) {
@@ -1127,7 +1087,7 @@ function processEventChannels(eventData) {
         (config.condition === null || config.condition(eventData))
       ) {
         const message = config.template(eventData);
-        if (message) {
+        if (message) { // Only send if template returns a message
           sendToChannel(config.id, message);
         }
       }
@@ -1137,87 +1097,24 @@ function processEventChannels(eventData) {
   });
 }
 
-// ======================= IMPROVED DISCORD SEND FUNCTION =======================
 function sendToChannel(channelId, message) {
   if (!message) return;
   
-  // Check if Discord is ready
-  if (!discordReady) {
-    console.log(`⚠️ Discord not ready, cannot send to ${channelId}`);
-    return;
-  }
-  
-  // Check if channel is in cache
-  let channel = client.channels.cache.get(channelId);
-  
-  if (!channel) {
-    console.log(`❌ Channel ${channelId} not found in cache, attempting to fetch...`);
-    // Try to fetch the channel
-    client.channels.fetch(channelId)
-      .then(fetchedChannel => {
-        if (fetchedChannel) {
-          console.log(`✅ Channel ${channelId} fetched successfully`);
-          discordChannelCache[channelId] = fetchedChannel;
-          // Try sending now
-          sendToChannel(channelId, message);
-        } else {
-          console.log(`❌ Channel ${channelId} not found`);
-          // Try to send to debug channel instead
-          const debugChannel = client.channels.cache.get(DEBUG_CHANNEL_ID);
-          if (debugChannel) {
-            debugChannel.send(`❌ Channel ${channelId} not found - check bot permissions\nOriginal message: ${message.substring(0, 1000)}`)
-              .catch(err => console.error("Error sending debug message:", err.message));
-          }
-        }
-      })
-      .catch(err => {
-        console.error(`❌ Failed to fetch channel ${channelId}:`, err.message);
-      });
-    return;
-  }
-  
-  // Send the message
-  if (message.length > 2000) {
-    const chunks = message.match(/.{1,1900}/g) || [];
-    chunks.forEach((chunk, index) => {
-      channel.send(chunk)
-        .then(() => {
-          lastDiscordSendAttempt = Date.now();
-          console.log(`✅ Sent to ${channelId} (part ${index + 1}/${chunks.length})`);
-        })
-        .catch((err) => {
-          console.error(`❌ Error sending to channel ${channelId}:`, err.message);
-          if (err.code === 50001) {
-            console.log(`❌ Missing Access to channel ${channelId} - check bot permissions`);
-          } else if (err.code === 10003) {
-            console.log(`❌ Unknown Channel ${channelId}`);
-          } else if (err.code === 50013) {
-            console.log(`❌ Missing Permissions for channel ${channelId}`);
-          }
+  const channel = client.channels.cache.get(channelId);
+  if (channel) {
+    // Split long messages if needed
+    if (message.length > 2000) {
+      const chunks = message.match(/.{1,1900}/g) || [];
+      chunks.forEach(chunk => {
+        channel.send(chunk).catch((err) => {
+          console.error(`Error sending to channel ${channelId}:`, err);
         });
-    });
-  } else {
-    channel.send(message)
-      .then(() => {
-        lastDiscordSendAttempt = Date.now();
-        console.log(`✅ Sent to ${channelId}`);
-      })
-      .catch((err) => {
-        console.error(`❌ Error sending to channel ${channelId}:`, err.message);
-        if (err.code === 50001) {
-          console.log(`❌ Missing Access to channel ${channelId} - check bot permissions`);
-          // Try to send a test message to debug channel
-          const debugChannel = client.channels.cache.get(DEBUG_CHANNEL_ID);
-          if (debugChannel) {
-            debugChannel.send(`❌ Missing Access to channel ${channelId}. Please re-invite the bot with proper permissions.`)
-              .catch(e => console.error("Error sending debug message:", e.message));
-          }
-        } else if (err.code === 10003) {
-          console.log(`❌ Unknown Channel ${channelId}`);
-        } else if (err.code === 50013) {
-          console.log(`❌ Missing Permissions for channel ${channelId}`);
-        }
       });
+    } else {
+      channel.send(message).catch((err) => {
+        console.error(`Error sending to channel ${channelId}:`, err);
+      });
+    }
   }
 }
 
@@ -1225,175 +1122,88 @@ function sendToDebugChannel(message) {
   sendToChannel(DEBUG_CHANNEL_ID, message);
 }
 
-// ======================= BOT STARTUP =======================
+// Bot Startup
 client.on("ready", () => {
   console.log(`🤖 Logged in as ${client.user.tag}`);
-  console.log(`📊 Bot is in ${client.guilds.cache.size} guild(s)`);
-  discordReady = true;
+  sendToDebugChannel("🤖 Bot started successfully");
   
-  // Pre-cache all channels
-  client.guilds.cache.forEach(guild => {
-    console.log(`📊 In guild: ${guild.name} (${guild.id})`);
-    guild.channels.cache.forEach(channel => {
-      discordChannelCache[channel.id] = channel;
-      if (channel.id === DEBUG_CHANNEL_ID || channel.id === CATCH_ALL_CHANNEL_ID) {
-        console.log(`📊 Found target channel: ${channel.name} (${channel.id})`);
-      }
-    });
-  });
-  
-  // Send test message to debug channel
-  sendToDebugChannel(`🤖 Bot started successfully in ${client.guilds.cache.size} guilds`);
-  
+  // Small delay before connecting WebSocket
   setTimeout(() => {
     connectWebSocket();
   }, 2000);
   
-  // Log channel cache status every minute
-  setInterval(() => {
-    if (receivedDataEvents > 0) {
-      console.log(`📊 Discord Status: Ready=${discordReady}, Channels=${Object.keys(discordChannelCache).length}, Events=${receivedDataEvents}, LastSend=${Math.round((Date.now() - lastDiscordSendAttempt)/1000)}s ago`);
-    }
-  }, 60000);
-  
+  // Start connection monitor
   connectionMonitorInterval = setInterval(() => {
     const timeSinceLastMessage = Date.now() - lastMessageTime;
     
-    if (!isJoined && socket && socket.readyState === WebSocket.OPEN) {
-      const elapsed = Date.now() - wsConnectionStartTime;
-      if (elapsed > 30000) {
-        console.log("⚠️ Still not joined after 30s, retrying join...");
-        sendJoinMessage();
-      }
+    // If no messages for 2 minutes, force reconnect
+    if (timeSinceLastMessage > 120000 && socket?.readyState === WebSocket.OPEN) {
+      console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
+      sendToDebugChannel(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, reconnecting...`);
+      socket.close();
     }
-    
-    if (timeSinceLastMessage > 120000) {
-      if (socket && socket.readyState === WebSocket.OPEN) {
-        console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
-        sendToDebugChannel(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, reconnecting...`);
-        cleanupSocket();
-        scheduleReconnect();
-      } else if (!socket || socket.readyState === WebSocket.CLOSED) {
-        console.log(`⚠️ Socket is closed, attempting reconnect`);
-        scheduleReconnect();
-      }
-    }
-    
-    if (socket && socket.readyState === WebSocket.CONNECTING) {
-      const elapsed = Date.now() - wsConnectionStartTime;
-      if (elapsed > 30000) {
-        console.log(`⚠️ Socket stuck in CONNECTING state for ${Math.round(elapsed/1000)}s, forcing reconnect`);
-        cleanupSocket();
-        scheduleReconnect();
-      }
-    }
-  }, 15000);
+  }, 30000); // Check every 30 seconds
 });
 
 client.on("error", (error) => {
   console.error("Discord client error:", error);
-  if (sendToDebugChannel) {
-    sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
-  }
+  sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
 });
 
-client.on("disconnect", (event) => {
-  console.log(`🔴 Discord disconnected:`, event);
-  discordReady = false;
-  sendToDebugChannel(`🔴 Discord disconnected`);
-});
-
-client.on("reconnecting", () => {
-  console.log(`🔄 Discord reconnecting...`);
-  sendToDebugChannel(`🔄 Discord reconnecting...`);
-});
-
-client.on("resume", () => {
-  console.log(`🟢 Discord resumed`);
-  discordReady = true;
-  sendToDebugChannel(`🟢 Discord resumed`);
-});
-
-// ======================= HEALTH CHECK SERVER =======================
+// Health check server
 const server = http.createServer((req, res) => {
   const timeSinceLastMessage = Date.now() - lastMessageTime;
   const wsStatus = socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected';
   const wsState = socket?.readyState;
-  
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    if (!isReconnecting && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-      console.log("🔄 Health check triggered reconnect");
-      scheduleReconnect();
-    }
-  }
   
   res.writeHead(200, { 
     'Content-Type': 'text/plain',
     'Connection': 'keep-alive'
   });
   res.end(`Bot Status:
-- Discord Ready: ${discordReady}
-- Discord Channels Cached: ${Object.keys(discordChannelCache).length}
 - WebSocket: ${wsStatus} (State: ${wsState})
-- Joined Feed: ${isJoined}
-- Events Received: ${receivedDataEvents}
 - Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
-- Last Discord Send: ${Math.round((Date.now() - lastDiscordSendAttempt)/1000)}s ago
 - Reconnect Attempts: ${reconnectAttempts}
-- Is Reconnecting: ${isReconnecting}
 - Uptime: ${Math.round(process.uptime() / 60)} minutes
 - Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB
 `);
 });
-server.keepAliveTimeout = 60000;
+server.keepAliveTimeout = 60000; // 60 seconds
 server.listen(8080, '0.0.0.0', () => {
   console.log('Health check server listening on port 8080');
 });
 
-// ======================= VALIDATE AND LOGIN =======================
+// Validate token
 if (!process.env.TOKEN) {
   console.error("❌ No Discord token found in environment variables!");
   process.exit(1);
 }
 
-console.log("🔑 Attempting to login to Discord...");
-console.log(`🔑 Token length: ${process.env.TOKEN.length} characters`);
-console.log(`🔑 Token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
-
-// Force a timeout to see if login is hanging
-const loginTimeout = setTimeout(() => {
-  console.error("❌ Discord login TIMEOUT - No response after 10 seconds!");
-  console.error("❌ Please check your TOKEN environment variable");
-  console.error(`❌ Current token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
-  console.error("❌ Make sure you copied the Bot Token, not the Client ID or Client Secret");
+// Login with error handling
+client.login(process.env.TOKEN).catch((err) => {
+  console.error("Login error:", err);
   process.exit(1);
-}, 10000);
+});
 
-client.login(process.env.TOKEN)
-  .then(() => {
-    clearTimeout(loginTimeout);
-    console.log("✅ Discord login successful");
-  })
-  .catch((err) => {
-    clearTimeout(loginTimeout);
-    console.error("❌ Login error:", err);
-    console.error("❌ Full error:", JSON.stringify(err, null, 2));
-    process.exit(1);
-  });
-
-// ======================= GRACEFUL SHUTDOWN =======================
+// Graceful shutdown
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully...');
-  cleanupSocket();
+  if (pingInterval) clearInterval(pingInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
   if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
+  if (socket) socket.close();
   client.destroy();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully...');
-  cleanupSocket();
+  if (pingInterval) clearInterval(pingInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
   if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
+  if (socket) socket.close();
   client.destroy();
   process.exit(0);
 });
