@@ -2,9 +2,9 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const WebSocket = require("ws");
 const http = require("http");
 const { HttpsProxyAgent } = require('https-proxy-agent');
+const { Agent } = require('https');
 
 // ======================= PROXY SETUP =======================
-// Read proxy settings from environment variables
 const PROXY_HOST = process.env.PROXY_HOST || null;
 const PROXY_PORT = process.env.PROXY_PORT || null;
 const PROXY_USERNAME = process.env.PROXY_USERNAME || null;
@@ -12,7 +12,6 @@ const PROXY_PASSWORD = process.env.PROXY_PASSWORD || null;
 
 let proxyAgent = null;
 
-// Build proxy agent if credentials are provided
 if (PROXY_HOST && PROXY_PORT) {
   let proxyUrl = `http://`;
   if (PROXY_USERNAME && PROXY_PASSWORD) {
@@ -24,7 +23,7 @@ if (PROXY_HOST && PROXY_PORT) {
   proxyAgent = new HttpsProxyAgent(proxyUrl);
 }
 
-// Discord Client Setup with proxy support
+// Discord Client Setup - WITHOUT rest.agent to avoid undici compatibility issues
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -32,253 +31,78 @@ const client = new Client({
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
   ],
-  // Add proxy agent to REST requests
-  rest: {
-    agent: proxyAgent
-  }
 });
 
-// Also patch the WebSocket connection to use proxy
-// WebSocket will use the same proxy agent via the 'agent' option when creating the socket
-// No need for ws-proxy - we pass the agent directly to the WebSocket constructor
-
 // ======================= FILTERS =======================
-//filter for Kings League
 const KL_KEYWORDS = [
-  "España",
-  "Split 1",
-  "Split 3",
-  "Split 5",
-  "2023-24",
-  "2024-25",
-  "SP5",
-  "Kings Cup",
-  "Queens Cup",
-  "KWC Nations",
-  "Kings League",
-  "Queens League",
-  "Kings World"
+  "España", "Split 1", "Split 3", "Split 5", "2023-24", "2024-25", "SP5",
+  "Kings Cup", "Queens Cup", "KWC Nations", "Kings League", "Queens League", "Kings World"
 ];
 
-const KL_HERO = [
-  " Hero "
-];
+const KL_HERO = [" Hero "];
 
 const EWC_PACKS = new Set([
-"APXL: Jul 07 - 11 Gold",
-"APXL: Jul 07 - 11 Premium",
-"CBO: Aug 05 - 09 Gold",
-"CBO: Aug 05 - 09 Premium",
-"CWZ: Jul 30 - Aug 02 Gold",
-"CWZ: Jul 30 - Aug 02 Premium",
-"CHESS: Aug 11 - 15 Gold",
-"CHESS: Aug 11 - 15 Premium",
-"CS2: Aug 19 - 23 Gold",
-"CS2: Aug 19 - 23 Premium",
-"RCKL: Aug 12 - 16 Gold",
-"RCKL: Aug 12 - 16 Premium",
-"DT2: Jul 07 - 19 Gold",
-"DT2: Jul 07 - 19 Premium",
-"ESFC: Jul 22 - 26 Gold",
-"ESFC: Jul 22 - 26 Premium",
-"FFY: Jul 08 - 11 Gold",
-"FFY: Jul 08 - 11 Premium",
-"FRF: Jul 15 - 18 Gold",
-"FRF: Jul 15 - 18 Premium",
-"HNK: Jul 30 - Aug 08 Gold",
-"HNK: Jul 30 - Aug 08 Premium",
-"LGL: Jul 15 - 19 Gold",
-"LGL: Jul 15 - 19 Premium",
-"MBL: Jul 22 - Aug 01 Gold",
-"MBL: Jul 22 - Aug 01 Premium",
-"MBLW: Jul 14 - 18 Gold",
-"MBLW: Jul 14 - 18 Premium",
-"OVW2: Jul 29 - Aug 02 Gold",
-"OVW2: Jul 29 - Aug 02 Premium",
-"PBGB: Jul 21 - 26 Gold",
-"PBGB: Jul 21 - 26 Premium",
-"PBGM: Aug 06 - 16 Gold",
-"PBGM: Aug 06 - 16 Premium",
-"R6S: Aug 04 - 15 Gold",
-"R6S: Aug 04 - 15 Premium",
-"STF6: Jul 29 - Aug 01 Gold",
-"STF6: Jul 29 - Aug 01 Premium",
-"TK8: Aug 05 - 08 Gold",
-"TK8: Aug 05 - 08 Premium",
-"TMFT: Jul 21 - 25 Gold",
-"TMFT: Jul 21 - 25 Premium",
-"VLRT: Jul 02 - 12 Gold",
-"VLRT: Jul 02 - 12 Premium",
-"Trackmania Gold",
-"Trackmania Premium",
-"Fortnite Gold",
-"Fortnite Premium",
-"CrossFire Gold",
-"CrossFire Premium",
-"Rocket League Gold",
-"Rocket League Premium",
-"Counter-Strike 2 Gold",
-"Counter-Strike 2 Premium",
-"CHESS Gold",
-"CHESS Premium",
-"PUBG Mobile Gold",
-"PUBG Mobile Premium",
-"Tekken 8 Gold",
-"Tekken 8 Premium",
-"Call of Duty: Black Ops Gold",
-"Call of Duty: Black Ops Premium",
-"Rainbow Six Siege Gold",
-"Rainbow Six Siege Premium",
-"Honor of Kings Gold",
-"Honor of Kings Premium",
-"Call of Duty: Warzone Gold",
-"Call of Duty: Warzone Premium",
-"Street Fighter 6 Gold",
-"Street Fighter 6 Premium",
-"Overwatch 2 Gold",
-"Overwatch 2 Premium",
-"Mobile Legends Gold",
-"Mobile Legends Premium",
-"EA SPORTS FC Gold",
-"EA SPORTS FC Premium",
-"Teamfight Tactics Gold",
-"Teamfight Tactics Premium",
-"PUBG: Battlegrounds Gold",
-"PUBG: Battlegrounds Premium",
-"League of Legends Gold",
-"League of Legends Premium",
-"Free Fire Gold",
-"Free Fire Premium",
-"Mobile Legends Women Gold",
-"Mobile Legends Women Premium",
-"Fatal Fury Gold",
-"Fatal Fury Premium",
-"Dota 2 Gold",
-"Dota 2 Premium",
-"Apex Legends Gold",
-"Apex Legends Premium",
-"VALORANT Gold",
-"VALORANT Premium"
+"APXL: Jul 07 - 11 Gold", "APXL: Jul 07 - 11 Premium", "CBO: Aug 05 - 09 Gold", "CBO: Aug 05 - 09 Premium",
+"CWZ: Jul 30 - Aug 02 Gold", "CWZ: Jul 30 - Aug 02 Premium", "CHESS: Aug 11 - 15 Gold", "CHESS: Aug 11 - 15 Premium",
+"CS2: Aug 19 - 23 Gold", "CS2: Aug 19 - 23 Premium", "RCKL: Aug 12 - 16 Gold", "RCKL: Aug 12 - 16 Premium",
+"DT2: Jul 07 - 19 Gold", "DT2: Jul 07 - 19 Premium", "ESFC: Jul 22 - 26 Gold", "ESFC: Jul 22 - 26 Premium",
+"FFY: Jul 08 - 11 Gold", "FFY: Jul 08 - 11 Premium", "FRF: Jul 15 - 18 Gold", "FRF: Jul 15 - 18 Premium",
+"HNK: Jul 30 - Aug 08 Gold", "HNK: Jul 30 - Aug 08 Premium", "LGL: Jul 15 - 19 Gold", "LGL: Jul 15 - 19 Premium",
+"MBL: Jul 22 - Aug 01 Gold", "MBL: Jul 22 - Aug 01 Premium", "MBLW: Jul 14 - 18 Gold", "MBLW: Jul 14 - 18 Premium",
+"OVW2: Jul 29 - Aug 02 Gold", "OVW2: Jul 29 - Aug 02 Premium", "PBGB: Jul 21 - 26 Gold", "PBGB: Jul 21 - 26 Premium",
+"PBGM: Aug 06 - 16 Gold", "PBGM: Aug 06 - 16 Premium", "R6S: Aug 04 - 15 Gold", "R6S: Aug 04 - 15 Premium",
+"STF6: Jul 29 - Aug 01 Gold", "STF6: Jul 29 - Aug 01 Premium", "TK8: Aug 05 - 08 Gold", "TK8: Aug 05 - 08 Premium",
+"TMFT: Jul 21 - 25 Gold", "TMFT: Jul 21 - 25 Premium", "VLRT: Jul 02 - 12 Gold", "VLRT: Jul 02 - 12 Premium",
+"Trackmania Gold", "Trackmania Premium", "Fortnite Gold", "Fortnite Premium",
+"CrossFire Gold", "CrossFire Premium", "Rocket League Gold", "Rocket League Premium",
+"Counter-Strike 2 Gold", "Counter-Strike 2 Premium", "CHESS Gold", "CHESS Premium",
+"PUBG Mobile Gold", "PUBG Mobile Premium", "Tekken 8 Gold", "Tekken 8 Premium",
+"Call of Duty: Black Ops Gold", "Call of Duty: Black Ops Premium",
+"Rainbow Six Siege Gold", "Rainbow Six Siege Premium", "Honor of Kings Gold", "Honor of Kings Premium",
+"Call of Duty: Warzone Gold", "Call of Duty: Warzone Premium", "Street Fighter 6 Gold", "Street Fighter 6 Premium",
+"Overwatch 2 Gold", "Overwatch 2 Premium", "Mobile Legends Gold", "Mobile Legends Premium",
+"EA SPORTS FC Gold", "EA SPORTS FC Premium", "Teamfight Tactics Gold", "Teamfight Tactics Premium",
+"PUBG: Battlegrounds Gold", "PUBG: Battlegrounds Premium", "League of Legends Gold", "League of Legends Premium",
+"Free Fire Gold", "Free Fire Premium", "Mobile Legends Women Gold", "Mobile Legends Women Premium",
+"Fatal Fury Gold", "Fatal Fury Premium", "Dota 2 Gold", "Dota 2 Premium",
+"Apex Legends Gold", "Apex Legends Premium", "VALORANT Gold", "VALORANT Premium"
 ]);
 
-//filter for EWC
-const EWC_KEYWORDS = [
-  "EWC",
-"First Edition"
-];
+const EWC_KEYWORDS = ["EWC", "First Edition"];
 
 const KL_PACKS = new Set([
-"Campeón: Split 3",
-"KWCC: Champions Reward",
-"Kings Cup America Champions",
-"Kings Cup Brazil",
-"Kings Cup Brazil Prestige",
-"Kings Cup Brazil Rewards",
-"Kings Cup Europe Champions",
-"Kings Cup Germany",
-"Kings Cup Germany Prestige",
-"Kings Cup Germany Reward",
-"Kings Cup Italy",
-"Kings Cup Italy Prestige",
-"Kings Cup Italy Reward",
-"Kings Cup MENA",
-"Kings Cup MENA Prestige",
-"Kings Cup MENA Reward",
-"Kings Cup Mexico",
-"Kings Cup Mexico Prestige",
-"Kings Cup Mexico Reward",
-"Kings Cup Spain",
-"Kings Cup Spain Coentrão",
-"Kings Cup Spain Coentrão Prestige",
-"Kings Cup Spain Prestige",
-"Kings Cup Spain Reward",
-"Kings League Brazil",
-"Kings League Brazil: Campeão",
-"Kings League Brazil: Prestige",
-"Kings League Brazil: Reward",
-"Kings League France",
-"Kings League France: Champion",
-"Kings League France: Reward",
-"Kings League Germany",
-"Kings League Germany: Champions",
-"Kings League Germany: Prestige",
-"Kings League Germany: Reward",
-"Kings League Italy",
-"Kings League Italy G9",
-"Kings League Italy G9: Prestige",
-"Kings League Italy: Prestige",
-"Kings League Mexico",
-"Kings League Mexico: Campeón",
-"Kings League Mexico: Prestige",
-"Kings League Mexico: Reward",
-"Kings League Spain",
-"Kings League Spain: Campeón",
-"Kings League Spain: Prestige",
-"Kings League Spain: Reward",
-"Kings World Cup Nations",
-"Kings World Cup Nations Champions",
-"Kings World Cup Nations Reward",
-"Kings World Cup Nations: Prestige",
-"KWCC",
-"KWCC: Prestige",
-"KWCC: Reward",
-"Oro 2023-24",
-"Oro 2024-25",
-"Oro+ 2024-25",
-"Pack de Bienvenida 2023-24",
-"Pack de Bienvenida 2024-25",
-"Pack de Bienvenida+ 2024-25",
-"Plata 2023-24",
-"Plata 2024-25",
-"Plata+ 2024-25",
-"Platino 2023-24",
-"Platino 2024-25",
-"Platino+ 2024-25",
-"Queens Cup Champions",
-"Queens Cup Mexico",
-"Queens Cup Mexico Prestige",
-"Queens Cup Mexico Reward",
-"Queens Cup Spain",
-"Queens Cup Spain Prestige",
-"Queens Cup Spain Reward",
-"Queens League Mexico",
-"Queens League Mexico: Campeón",
-"Queens League Mexico: Reward",
-"Queens League Spain",
-"Queens League Spain: Campeón",
-"Queens League Spain: Prestige",
-"S5 Rewards 2024-25",
-"S5 Wild Cards Cuartos",
-"S5 Wild Cards J1 2024-25",
-"S5 Wild Cards J10",
-"S5 Wild Cards J11",
-"S5 Wild Cards J3 2024-25",
-"S5 Wild Cards J4 2024-25",
-"S5 Wild Cards J5 2024-25",
-"S5 Wild Cards J6 2024-25",
-"S5 Wild Cards J7",
-"S5 Wild Cards J8",
-"S5 Wild Cards J9",
-"S5 Wild Cards Play-In",
-"S5 Wild Plata Cuartos",
-"S5 Wild Plata J1 2024-25",
-"S5 Wild Plata J10",
-"S5 Wild Plata J11",
-"S5 Wild Plata J3 2024-25",
-"S5 Wild Plata J4 2024-25",
-"S5 Wild Plata J5 2024-25",
-"S5 Wild Plata J6 2024-25",
-"S5 Wild Plata J7",
-"S5 Wild Plata J8",
-"S5 Wild Plata J9",
-"S5 Wild Plata Play-In",
-"S5: Campeones",
-"Split 1 Campeones 2024-25",
-"Split 1 Rewards",
-"Split 1 Rewards+ 2024-25+",
-"Split 5 Bienvenida",
-"Split 5 Plata",
-"Split 5 Platino",
+"Campeón: Split 3", "KWCC: Champions Reward", "Kings Cup America Champions",
+"Kings Cup Brazil", "Kings Cup Brazil Prestige", "Kings Cup Brazil Rewards",
+"Kings Cup Europe Champions", "Kings Cup Germany", "Kings Cup Germany Prestige",
+"Kings Cup Germany Reward", "Kings Cup Italy", "Kings Cup Italy Prestige",
+"Kings Cup Italy Reward", "Kings Cup MENA", "Kings Cup MENA Prestige",
+"Kings Cup MENA Reward", "Kings Cup Mexico", "Kings Cup Mexico Prestige",
+"Kings Cup Mexico Reward", "Kings Cup Spain", "Kings Cup Spain Coentrão",
+"Kings Cup Spain Coentrão Prestige", "Kings Cup Spain Prestige", "Kings Cup Spain Reward",
+"Kings League Brazil", "Kings League Brazil: Campeão", "Kings League Brazil: Prestige",
+"Kings League Brazil: Reward", "Kings League France", "Kings League France: Champion",
+"Kings League France: Reward", "Kings League Germany", "Kings League Germany: Champions",
+"Kings League Germany: Prestige", "Kings League Germany: Reward", "Kings League Italy",
+"Kings League Italy G9", "Kings League Italy G9: Prestige", "Kings League Italy: Prestige",
+"Kings League Mexico", "Kings League Mexico: Campeón", "Kings League Mexico: Prestige",
+"Kings League Mexico: Reward", "Kings League Spain", "Kings League Spain: Campeón",
+"Kings League Spain: Prestige", "Kings League Spain: Reward", "Kings World Cup Nations",
+"Kings World Cup Nations Champions", "Kings World Cup Nations Reward", "Kings World Cup Nations: Prestige",
+"KWCC", "KWCC: Prestige", "KWCC: Reward", "Oro 2023-24", "Oro 2024-25", "Oro+ 2024-25",
+"Pack de Bienvenida 2023-24", "Pack de Bienvenida 2024-25", "Pack de Bienvenida+ 2024-25",
+"Plata 2023-24", "Plata 2024-25", "Plata+ 2024-25", "Platino 2023-24", "Platino 2024-25",
+"Platino+ 2024-25", "Queens Cup Champions", "Queens Cup Mexico", "Queens Cup Mexico Prestige",
+"Queens Cup Mexico Reward", "Queens Cup Spain", "Queens Cup Spain Prestige", "Queens Cup Spain Reward",
+"Queens League Mexico", "Queens League Mexico: Campeón", "Queens League Mexico: Reward",
+"Queens League Spain", "Queens League Spain: Campeón", "Queens League Spain: Prestige",
+"S5 Rewards 2024-25", "S5 Wild Cards Cuartos", "S5 Wild Cards J1 2024-25", "S5 Wild Cards J10",
+"S5 Wild Cards J11", "S5 Wild Cards J3 2024-25", "S5 Wild Cards J4 2024-25", "S5 Wild Cards J5 2024-25",
+"S5 Wild Cards J6 2024-25", "S5 Wild Cards J7", "S5 Wild Cards J8", "S5 Wild Cards J9",
+"S5 Wild Cards Play-In", "S5 Wild Plata Cuartos", "S5 Wild Plata J1 2024-25", "S5 Wild Plata J10",
+"S5 Wild Plata J11", "S5 Wild Plata J3 2024-25", "S5 Wild Plata J4 2024-25", "S5 Wild Plata J5 2024-25",
+"S5 Wild Plata J6 2024-25", "S5 Wild Plata J7", "S5 Wild Plata J8", "S5 Wild Plata J9",
+"S5 Wild Plata Play-In", "S5: Campeones", "Split 1 Campeones 2024-25", "Split 1 Rewards",
+"Split 1 Rewards+ 2024-25+", "Split 5 Bienvenida", "Split 5 Plata", "Split 5 Platino",
 "Split 5: Oro 2024-25"
 ]);
 
@@ -286,21 +110,13 @@ const KL_PACKS = new Set([
 const DEBUG_CHANNEL_ID = "1400226748611825725";
 const CATCH_ALL_CHANNEL_ID = "1400207538498179162";
 
-// Template function to format values with Discord formatting
-const formatValue = (value, format = "") => {
-  if (value === undefined || value === null) return "";
-  
-  let formatted = String(value);
-  if (format.includes("bold")) formatted = `**${formatted}**`;
-  if (format.includes("italic")) formatted = `*${formatted}*`;
-  if (format.includes("code")) formatted = `\`${formatted}\``;
-  
-  return formatted;
-};
+function formatPrice(price) {
+  const num = parseFloat(price);
+  return num.toFixed(2).replace(/^0+(\d)/, "$1");
+}
 
 // ======================= CHANNEL CONFIG =======================
 const CHANNEL_CONFIG = [
-  // Debug channel (gets all non-filtered messages)
   {
     name: "debug",
     id: DEBUG_CHANNEL_ID,
@@ -313,8 +129,6 @@ const CHANNEL_CONFIG = [
         data.event,
       ),
   },
-  
-  // Catch-all channel (gets all non-filtered messages in detailed format)
   {
     name: "all",
     id: CATCH_ALL_CHANNEL_ID,
@@ -327,9 +141,7 @@ const CHANNEL_CONFIG = [
         data.event,
       ),
   },
-
-// ======================= CS CHANNELS =======================
-  // Pack opened events (mintNumber <= 30)
+  // ======================= CS CHANNELS =======================
   {
     name: "feed-30",
     id: "1400226179038056508",
@@ -342,11 +154,8 @@ const CHANNEL_CONFIG = [
       ).join("\n");
     },
     condition: (data) => data.cards?.some(card => card.mintNumber <= 30) &&
-      !KL_PACKS.has(data?.packName) && 
-      !EWC_PACKS.has(data?.packName),
+      !KL_PACKS.has(data?.packName) && !EWC_PACKS.has(data?.packName),
   },
-
-  // Market listings (cards/stickers < #20)
   {
     name: "listed-20",
     id: "1400226959103099041",
@@ -362,8 +171,6 @@ const CHANNEL_CONFIG = [
         !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // Market listings (cards/stickers < #100)
   {
     name: "listed-100",
     id: "1400227005659615373",
@@ -380,8 +187,6 @@ const CHANNEL_CONFIG = [
         !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // Pack listings
   {
     name: "listed-packs",
     id: "1400227045677731851",
@@ -391,11 +196,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.30 &&
-      !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
   },
-  
-  // Pack listings for less than 30 cent
   {
     name: "listed-packs-30c",
     id: "1423667054317277235",
@@ -405,11 +207,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.30 &&
-      !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
   },
-
-  // All listings
   {
     name: "listed-all-cards",
     id: "1400227076539158560",
@@ -424,8 +223,6 @@ const CHANNEL_CONFIG = [
         !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // Sales ≥ $1
   {
     name: "sold-1-usd",
     id: "1400227223658827947",
@@ -441,8 +238,6 @@ const CHANNEL_CONFIG = [
         !EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // Pack sales
   {
     name: "sold-packs",
     id: "1400227260857974834",
@@ -452,11 +247,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
-      !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
   },
-  
-  // Pack sales for 10 cents
   {
     name: "sold-packs-10c",
     id: "1423666913577402398",
@@ -466,11 +258,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
-      !KL_PACKS.has(data.entity?.itemName) && 
-      !EWC_PACKS.has(data.entity?.itemName),
+      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
   },
-
-  // All sales (non-pack/bundle)
   {
     name: "sold-all",
     id: "1400227291140722778",
@@ -487,7 +276,6 @@ const CHANNEL_CONFIG = [
   },
  
   // ======================= Kings League Channels =======================
-  // KL Pack opened events (mintNumber <= 50)
   {
     name: "kl-feed-50",
     id: "1428002013798727791",
@@ -502,8 +290,6 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
       KL_PACKS.has(data?.packName),
   },
-
-  // KL Market listings (cards/stickers < #200)
   {
     name: "kl-listed-200",
     id: "1428000363742629992",
@@ -518,8 +304,6 @@ const CHANNEL_CONFIG = [
         KL_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // KL Pack listings
   {
     name: "kl-listed-packs",
     id: "1428001329741041735",
@@ -531,8 +315,6 @@ const CHANNEL_CONFIG = [
       parseFloat(data.market?.price) > 0.15 &&
       KL_PACKS.has(data.entity?.itemName),
   },
-  
-  // KL Pack listings for less than 15 cent
   {
     name: "kl-listed-packs-15c",
     id: "1428001258446520350",
@@ -544,8 +326,6 @@ const CHANNEL_CONFIG = [
       parseFloat(data.market?.price) <= 0.15 &&
       KL_PACKS.has(data.entity?.itemName),
   },
-
-  // KL All listings
   {
     name: "kl-listed-all-cards",
     id: "1428001382396334110",
@@ -559,8 +339,6 @@ const CHANNEL_CONFIG = [
         KL_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-  
-  // KL All HERO listings
   {
     name: "kl-listed-all-hero-cards",
     id: "1433056194368634940",
@@ -574,8 +352,6 @@ const CHANNEL_CONFIG = [
         KL_HERO.some(kw => name.includes(kw));
     }
   },
-
-  // KL Sales ≥ $5
   {
     name: "kl-sold-5-usd",
     id: "1428001770810118164",
@@ -590,8 +366,6 @@ const CHANNEL_CONFIG = [
         KL_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // KL Pack sales
   {
     name: "kl-sold-packs",
     id: "1428001821779300532",
@@ -603,8 +377,6 @@ const CHANNEL_CONFIG = [
       parseFloat(data.market?.price) > 0.11 &&
       KL_PACKS.has(data.entity?.itemName),
   },
-  
-  // KL Pack sales for 10 cents
   {
     name: "kl-sold-packs-10c",
     id: "1428001877504823376",
@@ -616,8 +388,6 @@ const CHANNEL_CONFIG = [
       parseFloat(data.market?.price) <= 0.11 &&
       KL_PACKS.has(data.entity?.itemName),
   },
-
-  // KL sales all
   {
     name: "KL-sold-all",
     id: "1428001908781748344",
@@ -633,7 +403,6 @@ const CHANNEL_CONFIG = [
   },
 
   // ======================= EWC Channels =======================
-  // EWC Pack opened events (mintNumber <= 50)
   {
     name: "ewc-feed-50",
     id: "1483382717784657952",
@@ -648,8 +417,6 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
       EWC_PACKS.has(data?.packName),
   },
-
-  // EWC Pack opened events (mintNumber > 50)
   {
     name: "ewc-feed-rest",
     id: "1483382662579359915",
@@ -664,8 +431,6 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.cards?.some(card => card.mintNumber > 50) &&
       EWC_PACKS.has(data?.packName),
   },
-
-  // EWC Market listings (cards/stickers < #100)
   {
     name: "ewc-listed-100",
     id: "1537051210677354566",
@@ -680,8 +445,6 @@ const CHANNEL_CONFIG = [
         EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // EWC Pack listings
   {
     name: "ewc-listed-packs",
     id: "1537051327740379157",
@@ -692,8 +455,6 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       EWC_PACKS.has(data.entity?.itemName),
   },
-  
-  // EWC All listings
   {
     name: "ewc-listed-all-cards",
     id: "1537051421365633075",
@@ -707,8 +468,6 @@ const CHANNEL_CONFIG = [
         EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // EWC Sales ≥ $2
   {
     name: "ewc-sold-2-usd",
     id: "1537051491322568704",
@@ -723,8 +482,6 @@ const CHANNEL_CONFIG = [
         EWC_KEYWORDS.some(kw => name.includes(kw));
     }
   },
-
-  // EWC Pack sales
   {
     name: "ewc-sold-packs",
     id: "1537051524436332595",
@@ -735,8 +492,6 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       EWC_PACKS.has(data.entity?.itemName),
   },
- 
-  // EWC sales all
   {
     name: "EWC-sold-all",
     id: "1537051558884286535",
@@ -761,8 +516,6 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "bundle",
   },
-
-  // Bundle sales
   {
     name: "sold-bundle",
     id: "1400227451585433640",
@@ -772,8 +525,6 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "bundle",
   },
-
-  // Listings < #20 and ≤ $0.50
   {
     name: "list20-less-50",
     id: "1400237694172532807",
@@ -786,8 +537,6 @@ const CHANNEL_CONFIG = [
       data.entity?.mintNumber < 21 &&
       parseFloat(data.market?.price) <= 0.51,
   },
-
-  // Listings < #10 and ≤ $4
   {
     name: "list10-less-4",
     id: "1433181458738053273",
@@ -800,8 +549,6 @@ const CHANNEL_CONFIG = [
       data.entity?.mintNumber < 10 &&
       parseFloat(data.market?.price) <= 4.01,
   },
-   
-  // Listings < #100 and ≤ $0.15
   {
     name: "list100-less-15",
     id: "1400238804182372382",
@@ -814,8 +561,6 @@ const CHANNEL_CONFIG = [
       data.entity?.mintNumber < 100 &&
       parseFloat(data.market?.price) <= 0.15,
   },
-
-  // Store purchases
   {
     name: "store-purchase",
     id: "1400240719423082506",
@@ -825,8 +570,6 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },
-  
-  // Spinner
   {
     name: "spinner",
     id: "1423670126741426176",
@@ -836,9 +579,6 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },
-
-// TRADES
-  // accept
   {
     name: "TRADE-ACCEPTED",
     id: "1483382452331479040",
@@ -848,7 +588,6 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },
-  // sent
   {
     name: "TRADE-SENT",
     id: "1483382452331479040",
@@ -858,7 +597,6 @@ const CHANNEL_CONFIG = [
     },
     condition: null,
   },
-  // decline
   {
     name: "TRADE-DECLINED",
     id: "1483382452331479040",
@@ -879,12 +617,6 @@ let lastMessageTime = Date.now();
 let connectionMonitorInterval;
 let discordReady = false;
 let discordChannelCache = {};
-let lastDiscordSendAttempt = 0;
-
-function formatPrice(price) {
-  const num = parseFloat(price);
-  return num.toFixed(2).replace(/^0+(\d)/, "$1");
-}
 
 function shouldProcessEvent(eventName) {
   const SKIP_EVENTS = ["join-public-feed", "heartbeat"];
