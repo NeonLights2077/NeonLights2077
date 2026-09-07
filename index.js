@@ -39,9 +39,8 @@ const client = new Client({
 });
 
 // Also patch the WebSocket connection to use proxy
-const WebSocketProxy = proxyAgent ? require('ws-proxy')({
-  agent: proxyAgent
-}) : WebSocket;
+// WebSocket will use the same proxy agent via the 'agent' option when creating the socket
+// No need for ws-proxy - we pass the agent directly to the WebSocket constructor
 
 // ======================= FILTERS =======================
 //filter for Kings League
@@ -875,16 +874,13 @@ const CHANNEL_CONFIG = [
 let socket;
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 20;
-let pingInterval;
-let heartbeatInterval;
-let reconnectTimeout;
+let pingInterval, heartbeatInterval, reconnectTimeout;
 let lastMessageTime = Date.now();
 let connectionMonitorInterval;
 let discordReady = false;
 let discordChannelCache = {};
 let lastDiscordSendAttempt = 0;
 
-// ======================= UTILITY FUNCTIONS =======================
 function formatPrice(price) {
   const num = parseFloat(price);
   return num.toFixed(2).replace(/^0+(\d)/, "$1");
@@ -905,23 +901,11 @@ function generateWebSocketKey() {
 }
 
 function cleanupSocket() {
-  if (pingInterval) {
-    clearInterval(pingInterval);
-    pingInterval = null;
-  }
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval);
-    heartbeatInterval = null;
-  }
-  if (reconnectTimeout) {
-    clearTimeout(reconnectTimeout);
-    reconnectTimeout = null;
-  }
-  
+  if (pingInterval) clearInterval(pingInterval);
+  if (heartbeatInterval) clearInterval(heartbeatInterval);
+  if (reconnectTimeout) clearTimeout(reconnectTimeout);
   if (socket) {
-    try {
-      socket.terminate();
-    } catch (e) {}
+    try { socket.terminate(); } catch (e) {}
     socket = null;
   }
 }
@@ -931,26 +915,20 @@ function scheduleReconnect() {
     console.log("❌ Max reconnection attempts reached");
     return;
   }
-  
   const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000);
   console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
-  
   reconnectTimeout = setTimeout(() => {
     reconnectAttempts++;
     connectWebSocket();
   }, delay);
 }
 
-// ======================= MAIN WEBSOCKET CONNECTION =======================
 function connectWebSocket() {
   cleanupSocket();
-
   const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
-  
   console.log(`🔄 Attempting connection to: ${wsUrl} (Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
   
   const wsKey = generateWebSocketKey();
-  
   const options = {
     headers: {
       "accept-language": "en,ru;q=0.9,uk;q=0.8,ro;q=0.7,en-GB;q=0.6,fr;q=0.5",
@@ -969,7 +947,6 @@ function connectWebSocket() {
     followRedirects: true
   };
 
-  // Use proxy for WebSocket if available
   if (proxyAgent) {
     options.agent = proxyAgent;
   }
@@ -979,7 +956,6 @@ function connectWebSocket() {
   socket.on("open", () => {
     console.log(`🟢 WebSocket Connected to ${wsUrl}`);
     sendToDebugChannel(`🟢 WebSocket Connected to Kolex.gg`);
-    
     reconnectAttempts = 0;
     lastMessageTime = Date.now();
     
@@ -1021,60 +997,29 @@ function connectWebSocket() {
     try {
       const data = rawData.toString();
       lastMessageTime = Date.now();
-      
-      if (data === "2") {
-        socket.send("3");
-        return;
-      }
-
-      if (data === "3") {
-        return;
-      }
-
-      if (data.startsWith("0")) {
-        console.log("🤝 Socket.io handshake received");
-        return;
-      }
-
-      if (data.startsWith("40")) {
-        console.log("🔌 Socket.io connected");
-        return;
-      }
-
+      if (data === "2") { socket.send("3"); return; }
+      if (data === "3") return;
+      if (data.startsWith("0")) { console.log("🤝 Socket.io handshake received"); return; }
+      if (data.startsWith("40")) { console.log("🔌 Socket.io connected"); return; }
       if (data.startsWith("42")) {
-        try {
-          const payload = data.substring(2);
-          const parsed = JSON.parse(payload);
-          
-          if (Array.isArray(parsed) && parsed.length >= 2) {
-            const [eventName, eventData] = parsed;
-            
-            if (eventName === "join-public-feed") {
-              console.log("✅ Successfully joined public feed");
-              return;
-            }
-            
-            if (eventName && eventData) {
-              eventData.event = eventName;
-              
-              if (shouldProcessEvent(eventName)) {
-                processEventChannels(eventData);
-              }
+        const payload = data.substring(2);
+        const parsed = JSON.parse(payload);
+        if (Array.isArray(parsed) && parsed.length >= 2) {
+          const [eventName, eventData] = parsed;
+          if (eventName === "join-public-feed") {
+            console.log("✅ Successfully joined public feed");
+            return;
+          }
+          if (eventName && eventData) {
+            eventData.event = eventName;
+            if (shouldProcessEvent(eventName)) {
+              processEventChannels(eventData);
             }
           }
-        } catch (parseError) {
-          console.error("Error parsing Socket.io message:", parseError.message);
         }
-        return;
       }
-      
-      if (data.length < 100) {
-        console.log("📨 Unknown message:", data);
-      }
-      
     } catch (error) {
       console.error("Error processing message:", error);
-      sendToDebugChannel(`❌ Processing Error: ${error.message}`);
     }
   });
 }
@@ -1082,14 +1027,10 @@ function connectWebSocket() {
 function processEventChannels(eventData) {
   CHANNEL_CONFIG.forEach((config) => {
     try {
-      if (
-        (config.event === "all" || config.event === eventData.event) &&
-        (config.condition === null || config.condition(eventData))
-      ) {
+      if ((config.event === "all" || config.event === eventData.event) &&
+          (config.condition === null || config.condition(eventData))) {
         const message = config.template(eventData);
-        if (message) {
-          sendToChannel(config.id, message);
-        }
+        if (message) sendToChannel(config.id, message);
       }
     } catch (error) {
       console.error(`Error processing channel ${config.name}:`, error);
@@ -1099,26 +1040,13 @@ function processEventChannels(eventData) {
 
 function sendToChannel(channelId, message) {
   if (!message) return;
-  
   if (!discordReady) {
     console.log(`⚠️ Discord not ready, cannot send to ${channelId}`);
     return;
   }
-  
   const channel = client.channels.cache.get(channelId);
   if (channel) {
-    if (message.length > 2000) {
-      const chunks = message.match(/.{1,1900}/g) || [];
-      chunks.forEach(chunk => {
-        channel.send(chunk).catch((err) => {
-          console.error(`Error sending to channel ${channelId}:`, err);
-        });
-      });
-    } else {
-      channel.send(message).catch((err) => {
-        console.error(`Error sending to channel ${channelId}:`, err);
-      });
-    }
+    channel.send(message).catch(err => console.error(`Error sending to ${channelId}:`, err));
   } else {
     console.log(`❌ Channel ${channelId} not found in cache`);
   }
@@ -1146,16 +1074,12 @@ client.on("ready", () => {
   
   sendToDebugChannel(`🤖 Bot started successfully in ${client.guilds.cache.size} guilds`);
   
-  setTimeout(() => {
-    connectWebSocket();
-  }, 2000);
+  setTimeout(() => connectWebSocket(), 2000);
   
   connectionMonitorInterval = setInterval(() => {
     const timeSinceLastMessage = Date.now() - lastMessageTime;
-    
     if (timeSinceLastMessage > 120000 && socket?.readyState === WebSocket.OPEN) {
       console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
-      sendToDebugChannel(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, reconnecting...`);
       cleanupSocket();
       scheduleReconnect();
     }
@@ -1167,59 +1091,31 @@ client.on("error", (error) => {
   sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
 });
 
-client.on("disconnect", (event) => {
-  console.log(`🔴 Discord disconnected:`, event);
-  discordReady = false;
-  sendToDebugChannel(`🔴 Discord disconnected`);
-});
-
-client.on("reconnecting", () => {
-  console.log(`🔄 Discord reconnecting...`);
-  sendToDebugChannel(`🔄 Discord reconnecting...`);
-});
-
-client.on("resume", () => {
-  console.log(`🟢 Discord resumed`);
-  discordReady = true;
-  sendToDebugChannel(`🟢 Discord resumed`);
-});
-
 // ======================= HEALTH CHECK SERVER =======================
 const server = http.createServer((req, res) => {
   const timeSinceLastMessage = Date.now() - lastMessageTime;
   const wsStatus = socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected';
-  const wsState = socket?.readyState;
-  
-  res.writeHead(200, { 
-    'Content-Type': 'text/plain',
-    'Connection': 'keep-alive'
-  });
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end(`Bot Status:
 - Discord Ready: ${discordReady}
-- Discord Channels Cached: ${Object.keys(discordChannelCache).length}
 - Proxy: ${PROXY_HOST ? `Using ${PROXY_HOST}:${PROXY_PORT}` : 'None'}
-- WebSocket: ${wsStatus} (State: ${wsState})
+- WebSocket: ${wsStatus}
 - Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
 - Reconnect Attempts: ${reconnectAttempts}
 - Uptime: ${Math.round(process.uptime() / 60)} minutes
-- Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB
 `);
 });
-server.keepAliveTimeout = 60000;
 server.listen(8080, '0.0.0.0', () => {
   console.log('Health check server listening on port 8080');
 });
 
-// ======================= VALIDATE AND LOGIN =======================
+// ======================= LOGIN =======================
 if (!process.env.TOKEN) {
-  console.error("❌ No Discord token found in environment variables!");
+  console.error("❌ No Discord token found!");
   process.exit(1);
 }
 
 console.log("🔑 Attempting to login to Discord...");
-console.log(`🔑 Token length: ${process.env.TOKEN.length} characters`);
-console.log(`🔑 Token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
-
 if (PROXY_HOST) {
   console.log(`🌐 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
 } else {
@@ -1227,10 +1123,7 @@ if (PROXY_HOST) {
 }
 
 const loginTimeout = setTimeout(() => {
-  console.error("❌ Discord login TIMEOUT - No response after 10 seconds!");
-  console.error("❌ Please check your TOKEN environment variable");
-  console.error(`❌ Current token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
-  console.error("❌ Make sure you copied the Bot Token, not the Client ID or Client Secret");
+  console.error("❌ Discord login TIMEOUT - No response after 15 seconds!");
   if (!PROXY_HOST) {
     console.error("❌ Try enabling a proxy - Render IPs may be blocked by Discord");
   }
@@ -1245,23 +1138,9 @@ client.login(process.env.TOKEN)
   .catch((err) => {
     clearTimeout(loginTimeout);
     console.error("❌ Login error:", err);
-    console.error("❌ Full error:", JSON.stringify(err, null, 2));
     process.exit(1);
   });
 
-// ======================= GRACEFUL SHUTDOWN =======================
-process.on('SIGTERM', () => {
-  console.log('Received SIGTERM, shutting down gracefully...');
-  cleanupSocket();
-  if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
-  client.destroy();
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  console.log('Received SIGINT, shutting down gracefully...');
-  cleanupSocket();
-  if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
-  client.destroy();
-  process.exit(0);
-});
+// Graceful shutdown
+process.on('SIGTERM', () => { cleanupSocket(); client.destroy(); process.exit(0); });
+process.on('SIGINT', () => { cleanupSocket(); client.destroy(); process.exit(0); });
