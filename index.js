@@ -1,1710 +1,1267 @@
-const axios = require('axios');
+const { Client, GatewayIntentBits } = require("discord.js");
+const WebSocket = require("ws");
+const http = require("http");
 const { HttpsProxyAgent } = require('https-proxy-agent');
-const express = require('express');
-const http = require('http');
-const path = require('path');
-const fs = require('fs');
 
-// ====================== PERSISTENT CONFIG FILE =======================
-const CONFIG_FILE = path.join(__dirname, 'saved_config.json');
+// ======================= PROXY SETUP =======================
+// Read proxy settings from environment variables
+const PROXY_HOST = process.env.PROXY_HOST || null;
+const PROXY_PORT = process.env.PROXY_PORT || null;
+const PROXY_USERNAME = process.env.PROXY_USERNAME || null;
+const PROXY_PASSWORD = process.env.PROXY_PASSWORD || null;
 
-// Load saved configuration
-let savedConfig = {
-  sprayerId: 6997
-};
+let proxyAgent = null;
 
-try {
-  if (fs.existsSync(CONFIG_FILE)) {
-    const data = fs.readFileSync(CONFIG_FILE, 'utf8');
-    savedConfig = JSON.parse(data);
-    console.log(`✅ Loaded saved config: sprayerId = ${savedConfig.sprayerId}`);
+// Build proxy agent if credentials are provided
+if (PROXY_HOST && PROXY_PORT) {
+  let proxyUrl = `http://`;
+  if (PROXY_USERNAME && PROXY_PASSWORD) {
+    proxyUrl += `${PROXY_USERNAME}:${PROXY_PASSWORD}@`;
   }
-} catch (error) {
-  console.log('No saved config found, using defaults');
+  proxyUrl += `${PROXY_HOST}:${PROXY_PORT}`;
+  
+  console.log(`🌐 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
+  proxyAgent = new HttpsProxyAgent(proxyUrl);
 }
 
-// ====================== PROXY CONFIGURATION =======================
-const PROXY_CONFIG = {
-  enabled: process.env.PROXY_ENABLED === 'true',
-  host: process.env.PROXY_HOST,
-  port: parseInt(process.env.PROXY_PORT || '0'),
-  username: process.env.PROXY_USERNAME,
-  password: process.env.PROXY_PASSWORD
-};
-
-// ======================= USER CONFIGURATION =======================
-const CONFIG = {
-  MY_ID: process.env.MY_ID,
-  PHOENIX: process.env.PHOENIX,
-  URL_REF: process.env.URL_REF,
-  URL_NAL: process.env.URL_NAL,
-  URL_SPRAY: process.env.URL_SPRAY,
-  URL_A4IV: process.env.URL_A4IV,
-  URL_PACKNUM: process.env.URL_PACKNUM,
-  URL_SPRAYER: process.env.URL_SPRAYER,
-  URL_PACK0PEN: process.env.URL_PACK0PEN,
-  URL_PACK4EK: process.env.URL_PACK4EK,
-  URL_CARD_TEMPLATE: process.env.URL_CARD_TEMPLATE,
-  URL_COLLECTIONS: process.env.URL_COLLECTIONS,
-  URL_BREW: process.env.URL_BREW,
-  URL_MARKET_LIST: process.env.URL_MARKET_LIST || 'https://api.kolex.gg/api/v1/market/list'
-};
-
-// ======================= BREWING CONFIGURATION =======================
-const BREWING_CONFIG = {
-  3235: {
-    collectionIds: [17920, 17921, 17922],
-    cardsPerBrew: 16
-  },
-  3236: {
-    collectionIds: [17923, 17924, 17925],
-    cardsPerBrew: 8
-  },
-  3237: {
-    collectionIds: [17953, 17986, 17987],
-    cardsPerBrew: 4
+// Discord Client Setup with proxy support
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
+  // Add proxy agent to REST requests
+  rest: {
+    agent: proxyAgent
   }
+});
+
+// Also patch the WebSocket connection to use proxy
+const WebSocketProxy = proxyAgent ? require('ws-proxy')({
+  agent: proxyAgent
+}) : WebSocket;
+
+// ======================= FILTERS =======================
+//filter for Kings League
+const KL_KEYWORDS = [
+  "España",
+  "Split 1",
+  "Split 3",
+  "Split 5",
+  "2023-24",
+  "2024-25",
+  "SP5",
+  "Kings Cup",
+  "Queens Cup",
+  "KWC Nations",
+  "Kings League",
+  "Queens League",
+  "Kings World"
+];
+
+const KL_HERO = [
+  " Hero "
+];
+
+const EWC_PACKS = new Set([
+"APXL: Jul 07 - 11 Gold",
+"APXL: Jul 07 - 11 Premium",
+"CBO: Aug 05 - 09 Gold",
+"CBO: Aug 05 - 09 Premium",
+"CWZ: Jul 30 - Aug 02 Gold",
+"CWZ: Jul 30 - Aug 02 Premium",
+"CHESS: Aug 11 - 15 Gold",
+"CHESS: Aug 11 - 15 Premium",
+"CS2: Aug 19 - 23 Gold",
+"CS2: Aug 19 - 23 Premium",
+"RCKL: Aug 12 - 16 Gold",
+"RCKL: Aug 12 - 16 Premium",
+"DT2: Jul 07 - 19 Gold",
+"DT2: Jul 07 - 19 Premium",
+"ESFC: Jul 22 - 26 Gold",
+"ESFC: Jul 22 - 26 Premium",
+"FFY: Jul 08 - 11 Gold",
+"FFY: Jul 08 - 11 Premium",
+"FRF: Jul 15 - 18 Gold",
+"FRF: Jul 15 - 18 Premium",
+"HNK: Jul 30 - Aug 08 Gold",
+"HNK: Jul 30 - Aug 08 Premium",
+"LGL: Jul 15 - 19 Gold",
+"LGL: Jul 15 - 19 Premium",
+"MBL: Jul 22 - Aug 01 Gold",
+"MBL: Jul 22 - Aug 01 Premium",
+"MBLW: Jul 14 - 18 Gold",
+"MBLW: Jul 14 - 18 Premium",
+"OVW2: Jul 29 - Aug 02 Gold",
+"OVW2: Jul 29 - Aug 02 Premium",
+"PBGB: Jul 21 - 26 Gold",
+"PBGB: Jul 21 - 26 Premium",
+"PBGM: Aug 06 - 16 Gold",
+"PBGM: Aug 06 - 16 Premium",
+"R6S: Aug 04 - 15 Gold",
+"R6S: Aug 04 - 15 Premium",
+"STF6: Jul 29 - Aug 01 Gold",
+"STF6: Jul 29 - Aug 01 Premium",
+"TK8: Aug 05 - 08 Gold",
+"TK8: Aug 05 - 08 Premium",
+"TMFT: Jul 21 - 25 Gold",
+"TMFT: Jul 21 - 25 Premium",
+"VLRT: Jul 02 - 12 Gold",
+"VLRT: Jul 02 - 12 Premium",
+"Trackmania Gold",
+"Trackmania Premium",
+"Fortnite Gold",
+"Fortnite Premium",
+"CrossFire Gold",
+"CrossFire Premium",
+"Rocket League Gold",
+"Rocket League Premium",
+"Counter-Strike 2 Gold",
+"Counter-Strike 2 Premium",
+"CHESS Gold",
+"CHESS Premium",
+"PUBG Mobile Gold",
+"PUBG Mobile Premium",
+"Tekken 8 Gold",
+"Tekken 8 Premium",
+"Call of Duty: Black Ops Gold",
+"Call of Duty: Black Ops Premium",
+"Rainbow Six Siege Gold",
+"Rainbow Six Siege Premium",
+"Honor of Kings Gold",
+"Honor of Kings Premium",
+"Call of Duty: Warzone Gold",
+"Call of Duty: Warzone Premium",
+"Street Fighter 6 Gold",
+"Street Fighter 6 Premium",
+"Overwatch 2 Gold",
+"Overwatch 2 Premium",
+"Mobile Legends Gold",
+"Mobile Legends Premium",
+"EA SPORTS FC Gold",
+"EA SPORTS FC Premium",
+"Teamfight Tactics Gold",
+"Teamfight Tactics Premium",
+"PUBG: Battlegrounds Gold",
+"PUBG: Battlegrounds Premium",
+"League of Legends Gold",
+"League of Legends Premium",
+"Free Fire Gold",
+"Free Fire Premium",
+"Mobile Legends Women Gold",
+"Mobile Legends Women Premium",
+"Fatal Fury Gold",
+"Fatal Fury Premium",
+"Dota 2 Gold",
+"Dota 2 Premium",
+"Apex Legends Gold",
+"Apex Legends Premium",
+"VALORANT Gold",
+"VALORANT Premium"
+]);
+
+//filter for EWC
+const EWC_KEYWORDS = [
+  "EWC",
+"First Edition"
+];
+
+const KL_PACKS = new Set([
+"Campeón: Split 3",
+"KWCC: Champions Reward",
+"Kings Cup America Champions",
+"Kings Cup Brazil",
+"Kings Cup Brazil Prestige",
+"Kings Cup Brazil Rewards",
+"Kings Cup Europe Champions",
+"Kings Cup Germany",
+"Kings Cup Germany Prestige",
+"Kings Cup Germany Reward",
+"Kings Cup Italy",
+"Kings Cup Italy Prestige",
+"Kings Cup Italy Reward",
+"Kings Cup MENA",
+"Kings Cup MENA Prestige",
+"Kings Cup MENA Reward",
+"Kings Cup Mexico",
+"Kings Cup Mexico Prestige",
+"Kings Cup Mexico Reward",
+"Kings Cup Spain",
+"Kings Cup Spain Coentrão",
+"Kings Cup Spain Coentrão Prestige",
+"Kings Cup Spain Prestige",
+"Kings Cup Spain Reward",
+"Kings League Brazil",
+"Kings League Brazil: Campeão",
+"Kings League Brazil: Prestige",
+"Kings League Brazil: Reward",
+"Kings League France",
+"Kings League France: Champion",
+"Kings League France: Reward",
+"Kings League Germany",
+"Kings League Germany: Champions",
+"Kings League Germany: Prestige",
+"Kings League Germany: Reward",
+"Kings League Italy",
+"Kings League Italy G9",
+"Kings League Italy G9: Prestige",
+"Kings League Italy: Prestige",
+"Kings League Mexico",
+"Kings League Mexico: Campeón",
+"Kings League Mexico: Prestige",
+"Kings League Mexico: Reward",
+"Kings League Spain",
+"Kings League Spain: Campeón",
+"Kings League Spain: Prestige",
+"Kings League Spain: Reward",
+"Kings World Cup Nations",
+"Kings World Cup Nations Champions",
+"Kings World Cup Nations Reward",
+"Kings World Cup Nations: Prestige",
+"KWCC",
+"KWCC: Prestige",
+"KWCC: Reward",
+"Oro 2023-24",
+"Oro 2024-25",
+"Oro+ 2024-25",
+"Pack de Bienvenida 2023-24",
+"Pack de Bienvenida 2024-25",
+"Pack de Bienvenida+ 2024-25",
+"Plata 2023-24",
+"Plata 2024-25",
+"Plata+ 2024-25",
+"Platino 2023-24",
+"Platino 2024-25",
+"Platino+ 2024-25",
+"Queens Cup Champions",
+"Queens Cup Mexico",
+"Queens Cup Mexico Prestige",
+"Queens Cup Mexico Reward",
+"Queens Cup Spain",
+"Queens Cup Spain Prestige",
+"Queens Cup Spain Reward",
+"Queens League Mexico",
+"Queens League Mexico: Campeón",
+"Queens League Mexico: Reward",
+"Queens League Spain",
+"Queens League Spain: Campeón",
+"Queens League Spain: Prestige",
+"S5 Rewards 2024-25",
+"S5 Wild Cards Cuartos",
+"S5 Wild Cards J1 2024-25",
+"S5 Wild Cards J10",
+"S5 Wild Cards J11",
+"S5 Wild Cards J3 2024-25",
+"S5 Wild Cards J4 2024-25",
+"S5 Wild Cards J5 2024-25",
+"S5 Wild Cards J6 2024-25",
+"S5 Wild Cards J7",
+"S5 Wild Cards J8",
+"S5 Wild Cards J9",
+"S5 Wild Cards Play-In",
+"S5 Wild Plata Cuartos",
+"S5 Wild Plata J1 2024-25",
+"S5 Wild Plata J10",
+"S5 Wild Plata J11",
+"S5 Wild Plata J3 2024-25",
+"S5 Wild Plata J4 2024-25",
+"S5 Wild Plata J5 2024-25",
+"S5 Wild Plata J6 2024-25",
+"S5 Wild Plata J7",
+"S5 Wild Plata J8",
+"S5 Wild Plata J9",
+"S5 Wild Plata Play-In",
+"S5: Campeones",
+"Split 1 Campeones 2024-25",
+"Split 1 Rewards",
+"Split 1 Rewards+ 2024-25+",
+"Split 5 Bienvenida",
+"Split 5 Plata",
+"Split 5 Platino",
+"Split 5: Oro 2024-25"
+]);
+
+// ======================= CHANNEL CONFIGURATION =======================
+const DEBUG_CHANNEL_ID = "1400226748611825725";
+const CATCH_ALL_CHANNEL_ID = "1400207538498179162";
+
+// Template function to format values with Discord formatting
+const formatValue = (value, format = "") => {
+  if (value === undefined || value === null) return "";
+  
+  let formatted = String(value);
+  if (format.includes("bold")) formatted = `**${formatted}**`;
+  if (format.includes("italic")) formatted = `*${formatted}*`;
+  if (format.includes("code")) formatted = `\`${formatted}\``;
+  
+  return formatted;
 };
 
-// ======================= USER DATA STORAGE =======================
-let userData = {
-  jwtToken: null,
-  lastRefresh: null,
-  nextSprayTime: null,
-  sprayCount: 0,
-  achievementsClaimed: 0,
-  lastFunds: 0,
-  logs: [],
-  isActive: false,
-  dailyFundsChecks: 0,
-  dailyAchievementsDone: false,
+// ======================= CHANNEL CONFIG =======================
+const CHANNEL_CONFIG = [
+  // Debug channel (gets all non-filtered messages)
+  {
+    name: "debug",
+    id: DEBUG_CHANNEL_ID,
+    event: "all",
+    template: (data) => {
+      return `**${data.event.toUpperCase()}** | User: ${data.user?.username || "Unknown"} | Type: ${data.entity?.type || "N/A"} | Item: ${data.entity?.itemName || "N/A"} | Price: ${data.market?.price ? `${formatPrice(data.market.price)}` : "N/A"}`;
+    },
+    condition: (data) =>
+      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
+        data.event,
+      ),
+  },
   
-  // Scheduling parameters (weekday)
-  dayStart: '06:01',    // CET = UTC+1
-  dayEnd: '22:59',      // CET = UTC+1
-  jitter: 12,           // minutes
-  baseInterval: 30,     // minutes
-  randomScale1: 0,      // minutes
-  randomScale2: 8,      // minutes
-  
-  // Weekend parameters
-  weekendDayStart: '07:04',    // CET = UTC+1 (07:44 UTC)
-  weekendDayEnd: '23:47',      // CET = UTC+1 (22:47 UTC)
-  weekendJitter: 42,           // minutes
-  weekendBaseInterval: 30,     // minutes
-  weekendRandomScale1: 5,      // minutes
-  weekendRandomScale2: 33,     // minutes
-  
-  // Internal state
-  _effectiveStartUTC: null,
-  _effectiveEndUTC: null,
-  _startJitterMin: 0,
-  _achTimers: [],
-  _dailyRolloverTimer: null
-};
+  // Catch-all channel (gets all non-filtered messages in detailed format)
+  {
+    name: "all",
+    id: CATCH_ALL_CHANNEL_ID,
+    event: "all",
+    template: (data) => {
+      return `**${data.event.toUpperCase()}** | User: **${data.user?.username || "Unknown"}** | Data: \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1900)}\`\`\``;
+    },
+    condition: (data) =>
+      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
+        data.event,
+      ),
+  },
 
-// Debug logs storage
-let debugLogs = [];
+// ======================= CS CHANNELS =======================
+  // Pack opened events (mintNumber <= 30)
+  {
+    name: "feed-30",
+    id: "1400226179038056508",
+    event: "pack-opened",
+    template: (data) => {
+      const matchingCards = data.cards?.filter(card => card.mintNumber <= 30) || [];
+      if (matchingCards.length === 0) return null;
+      return matchingCards.map(card => 
+        `**${card.mintBatch || "N/A"}${card.mintNumber || "N/A"}** ${card.title || "Unknown"} opened by: *${data.user?.username || "Unknown"}* - Pack ID ${data?.id} - ${data?.packName}`
+      ).join("\n");
+    },
+    condition: (data) => data.cards?.some(card => card.mintNumber <= 30) &&
+      !KL_PACKS.has(data?.packName) && 
+      !EWC_PACKS.has(data?.packName),
+  },
 
-// Prize mapping
-const PRIZE_MAP = {
-  11986: '5,000 Silvercoins',
-  11981: 'Core 2026 Standard Pack',
-  12013: 'EPL 23 Pack',
-  11980: '500 Silvercoins',
-  11985: '1,000,000 Silvercoins',
-  11984: '100,000 Silvercoins',
-  11983: '2,500 Silvercoins',
-  11982: '1,000 Silvercoins'
-};
+  // Market listings (cards/stickers < #20)
+  {
+    name: "listed-20",
+    id: "1400226959103099041",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        data.entity?.mintNumber < 21 &&
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // Market listings (cards/stickers < #100)
+  {
+    name: "listed-100",
+    id: "1400227005659615373",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        data.entity?.mintNumber < 101 &&
+        data.entity?.mintNumber > 20 &&
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // Pack listings
+  {
+    name: "listed-packs",
+    id: "1400227045677731851",
+    event: "market-list",
+    template: (data) => {
+      return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) > 0.30 &&
+      !KL_PACKS.has(data.entity?.itemName) && 
+      !EWC_PACKS.has(data.entity?.itemName),
+  },
+  
+  // Pack listings for less than 30 cent
+  {
+    name: "listed-packs-30c",
+    id: "1423667054317277235",
+    event: "market-list",
+    template: (data) => {
+      return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) <= 0.30 &&
+      !KL_PACKS.has(data.entity?.itemName) && 
+      !EWC_PACKS.has(data.entity?.itemName),
+  },
+
+  // All listings
+  {
+    name: "listed-all-cards",
+    id: "1400227076539158560",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // Sales ≥ $1
+  {
+    name: "sold-1-usd",
+    id: "1400227223658827947",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        parseFloat(data.market?.price) >= 1 &&
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // Pack sales
+  {
+    name: "sold-packs",
+    id: "1400227260857974834",
+    event: "market-sold",
+    template: (data) => {
+      return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) > 0.11 &&
+      !KL_PACKS.has(data.entity?.itemName) && 
+      !EWC_PACKS.has(data.entity?.itemName),
+  },
+  
+  // Pack sales for 10 cents
+  {
+    name: "sold-packs-10c",
+    id: "1423666913577402398",
+    event: "market-sold",
+    template: (data) => {
+      return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) <= 0.11 &&
+      !KL_PACKS.has(data.entity?.itemName) && 
+      !EWC_PACKS.has(data.entity?.itemName),
+  },
+
+  // All sales (non-pack/bundle)
+  {
+    name: "sold-all",
+    id: "1400227291140722778",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        !KL_KEYWORDS.some(kw => name.includes(kw)) &&
+        !EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+ 
+  // ======================= Kings League Channels =======================
+  // KL Pack opened events (mintNumber <= 50)
+  {
+    name: "kl-feed-50",
+    id: "1428002013798727791",
+    event: "pack-opened",
+    template: (data) => {
+      const matchingCards = data.cards?.filter(card => card.mintNumber <= 50) || [];
+      if (matchingCards.length === 0) return null;
+      return matchingCards.map(card => 
+        `**${card.mintBatch || "N/A"}${card.mintNumber || "N/A"}** ${card.title || "Unknown"} opened by: *${data.user?.username || "Unknown"}* - Pack ID ${data?.id} - ${data?.packName}`
+      ).join("\n");
+    },
+    condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
+      KL_PACKS.has(data?.packName),
+  },
+
+  // KL Market listings (cards/stickers < #200)
+  {
+    name: "kl-listed-200",
+    id: "1428000363742629992",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        data.entity?.mintNumber < 201 &&
+        KL_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // KL Pack listings
+  {
+    name: "kl-listed-packs",
+    id: "1428001329741041735",
+    event: "market-list",
+    template: (data) => {
+      return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) > 0.15 &&
+      KL_PACKS.has(data.entity?.itemName),
+  },
+  
+  // KL Pack listings for less than 15 cent
+  {
+    name: "kl-listed-packs-15c",
+    id: "1428001258446520350",
+    event: "market-list",
+    template: (data) => {
+      return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) <= 0.15 &&
+      KL_PACKS.has(data.entity?.itemName),
+  },
+
+  // KL All listings
+  {
+    name: "kl-listed-all-cards",
+    id: "1428001382396334110",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        KL_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+  
+  // KL All HERO listings
+  {
+    name: "kl-listed-all-hero-cards",
+    id: "1433056194368634940",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        KL_HERO.some(kw => name.includes(kw));
+    }
+  },
+
+  // KL Sales ≥ $5
+  {
+    name: "kl-sold-5-usd",
+    id: "1428001770810118164",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        parseFloat(data.market?.price) >= 5 &&
+        KL_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // KL Pack sales
+  {
+    name: "kl-sold-packs",
+    id: "1428001821779300532",
+    event: "market-sold",
+    template: (data) => {
+      return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) > 0.11 &&
+      KL_PACKS.has(data.entity?.itemName),
+  },
+  
+  // KL Pack sales for 10 cents
+  {
+    name: "kl-sold-packs-10c",
+    id: "1428001877504823376",
+    event: "market-sold",
+    template: (data) => {
+      return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      parseFloat(data.market?.price) <= 0.11 &&
+      KL_PACKS.has(data.entity?.itemName),
+  },
+
+  // KL sales all
+  {
+    name: "KL-sold-all",
+    id: "1428001908781748344",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        KL_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // ======================= EWC Channels =======================
+  // EWC Pack opened events (mintNumber <= 50)
+  {
+    name: "ewc-feed-50",
+    id: "1483382717784657952",
+    event: "pack-opened",
+    template: (data) => {
+      const matchingCards = data.cards?.filter(card => card.mintNumber <= 50) || [];
+      if (matchingCards.length === 0) return null;
+      return matchingCards.map(card => 
+        `**${card.mintBatch || "N/A"}${card.mintNumber || "N/A"}** ${card.title || "Unknown"} opened by: *${data.user?.username || "Unknown"}* - Pack ID ${data?.id} - ${data?.packName}`
+      ).join("\n");
+    },
+    condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
+      EWC_PACKS.has(data?.packName),
+  },
+
+  // EWC Pack opened events (mintNumber > 50)
+  {
+    name: "ewc-feed-rest",
+    id: "1483382662579359915",
+    event: "pack-opened",
+    template: (data) => {
+      const matchingCards = data.cards?.filter(card => card.mintNumber > 50) || [];
+      if (matchingCards.length === 0) return null;
+      return matchingCards.map(card => 
+        `**${card.mintBatch || "N/A"}${card.mintNumber || "N/A"}** ${card.title || "Unknown"} opened by: *${data.user?.username || "Unknown"}* - Pack ID ${data?.id} - ${data?.packName}`
+      ).join("\n");
+    },
+    condition: (data) => data.cards?.some(card => card.mintNumber > 50) &&
+      EWC_PACKS.has(data?.packName),
+  },
+
+  // EWC Market listings (cards/stickers < #100)
+  {
+    name: "ewc-listed-100",
+    id: "1537051210677354566",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        data.entity?.mintNumber < 101 &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // EWC Pack listings
+  {
+    name: "ewc-listed-packs",
+    id: "1537051327740379157",
+    event: "market-list",
+    template: (data) => {
+      return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      EWC_PACKS.has(data.entity?.itemName),
+  },
+  
+  // EWC All listings
+  {
+    name: "ewc-listed-all-cards",
+    id: "1537051421365633075",
+    event: "market-list",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // EWC Sales ≥ $2
+  {
+    name: "ewc-sold-2-usd",
+    id: "1537051491322568704",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return ["card", "sticker"].includes(data.entity?.type) &&
+        parseFloat(data.market?.price) >= 2 &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // EWC Pack sales
+  {
+    name: "ewc-sold-packs",
+    id: "1537051524436332595",
+    event: "market-sold",
+    template: (data) => {
+      return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => data.entity?.type === "pack" &&
+      EWC_PACKS.has(data.entity?.itemName),
+  },
+ 
+  // EWC sales all
+  {
+    name: "EWC-sold-all",
+    id: "1537051558884286535",
+    event: "market-sold",
+    template: (data) => {
+      return `**${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} bought by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
+    },
+    condition: (data) => {
+      const name = data.entity?.itemName || "";
+      return !["pack", "bundle"].includes(data.entity?.type) &&
+        EWC_KEYWORDS.some(kw => name.includes(kw));
+    }
+  },
+
+  // Bundle listings
+  {
+    name: "list-bundle",
+    id: "1400227416885952644",
+    event: "market-list",
+    template: (data) => {
+      return `📦 *${data.user?.username || "Unknown"}* listed a bundle *${data.entity?.itemName || "Unknown"}* for **${formatPrice(data.market?.price)}** - #${data.entity?.id} - [Market](<https://kolex.gg/bundles/view/${data.entity?.id}>) - ID \`${data?.id}\` - ID \`${data.market?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "bundle",
+  },
+
+  // Bundle sales
+  {
+    name: "sold-bundle",
+    id: "1400227451585433640",
+    event: "market-sold",
+    template: (data) => {
+      return `💰 *${data.user?.username || "Unknown"}* bought a bundle *${data.entity?.itemName || "Unknown"}* for **${formatPrice(data.market?.price)}** - #${data.entity?.id} - [Market](<https://kolex.gg/bundles/view/${data.entity?.id}>) - ID \`${data?.id}\``;
+    },
+    condition: (data) => data.entity?.type === "bundle",
+  },
+
+  // Listings < #20 and ≤ $0.50
+  {
+    name: "list20-less-50",
+    id: "1400237694172532807",
+    event: "market-list",
+    template: (data) => {
+      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) =>
+      ["card", "sticker"].includes(data.entity?.type) &&
+      data.entity?.mintNumber < 21 &&
+      parseFloat(data.market?.price) <= 0.51,
+  },
+
+  // Listings < #10 and ≤ $4
+  {
+    name: "list10-less-4",
+    id: "1433181458738053273",
+    event: "market-list",
+    template: (data) => {
+      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) =>
+      ["card", "sticker"].includes(data.entity?.type) &&
+      data.entity?.mintNumber < 10 &&
+      parseFloat(data.market?.price) <= 4.01,
+  },
+   
+  // Listings < #100 and ≤ $0.15
+  {
+    name: "list100-less-15",
+    id: "1400238804182372382",
+    event: "market-list",
+    template: (data) => {
+      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+    },
+    condition: (data) =>
+      ["card", "sticker"].includes(data.entity?.type) &&
+      data.entity?.mintNumber < 100 &&
+      parseFloat(data.market?.price) <= 0.15,
+  },
+
+  // Store purchases
+  {
+    name: "store-purchase",
+    id: "1400240719423082506",
+    event: "pack-purchased",
+    template: (data) => {
+      return `🛒 *${data.user?.username || "Unknown"}* bought ${data.amount} pack(s) \`${data.packTemplateId}\``;
+    },
+    condition: null,
+  },
+  
+  // Spinner
+  {
+    name: "spinner",
+    id: "1423670126741426176",
+    event: "spinner-feed",
+    template: (data) => {
+      return `Spinner: *${data.user?.username || "Unknown"}* - ${data?.name}`;
+    },
+    condition: null,
+  },
+
+// TRADES
+  // accept
+  {
+    name: "TRADE-ACCEPTED",
+    id: "1483382452331479040",
+    event: "trade-accepted",
+    template: (data) => {
+      return `✅ Accepted | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+    },
+    condition: null,
+  },
+  // sent
+  {
+    name: "TRADE-SENT",
+    id: "1483382452331479040",
+    event: "trade-sent",
+    template: (data) => {
+      return `📤 Sent | to *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+    },
+    condition: null,
+  },
+  // decline
+  {
+    name: "TRADE-DECLINED",
+    id: "1483382452331479040",
+    event: "trade-declined",
+    template: (data) => {
+      return `❌ Declined | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\`, was sent from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+    },
+    condition: null,
+  },  
+];
+
+// ======================= WEBSOCKET MANAGEMENT =======================
+let socket;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 20;
+let pingInterval;
+let heartbeatInterval;
+let reconnectTimeout;
+let lastMessageTime = Date.now();
+let connectionMonitorInterval;
+let discordReady = false;
+let discordChannelCache = {};
+let lastDiscordSendAttempt = 0;
 
 // ======================= UTILITY FUNCTIONS =======================
+function formatPrice(price) {
+  const num = parseFloat(price);
+  return num.toFixed(2).replace(/^0+(\d)/, "$1");
+}
 
-// Save configuration to file
-function saveConfigToFile() {
-  try {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(savedConfig, null, 2));
-    console.log(`✅ Saved config: sprayerId = ${savedConfig.sprayerId}`);
-    return true;
-  } catch (error) {
-    console.error('Failed to save config:', error);
-    return false;
+function shouldProcessEvent(eventName) {
+  const SKIP_EVENTS = ["join-public-feed", "heartbeat"];
+  return !SKIP_EVENTS.includes(eventName);
+}
+
+function generateWebSocketKey() {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let key = "";
+  for (let i = 0; i < 16; i++) {
+    key += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return Buffer.from(key).toString("base64");
+}
+
+function cleanupSocket() {
+  if (pingInterval) {
+    clearInterval(pingInterval);
+    pingInterval = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  if (reconnectTimeout) {
+    clearTimeout(reconnectTimeout);
+    reconnectTimeout = null;
+  }
+  
+  if (socket) {
+    try {
+      socket.terminate();
+    } catch (e) {}
+    socket = null;
   }
 }
 
-// Get current sprayer ID
-function getCurrentSprayerId() {
-  return savedConfig.sprayerId;
-}
-
-// Update sprayer ID
-function updateSprayerId(newId) {
-  savedConfig.sprayerId = parseInt(newId) || 6997;
-  saveConfigToFile();
-  return savedConfig.sprayerId;
-}
-
-// Debug logging function
-function debugLog(action, url, method, headers = {}, data = null, response = null, error = null) {
-  const debugEntry = {
-    timestamp: new Date().toISOString(),
-    action,
-    request: {
-      url,
-      method,
-      headers: JSON.stringify(headers, null, 2),
-      body: data ? JSON.stringify(data, null, 2) : null
-    },
-    response: response ? {
-      status: response.status,
-      data: JSON.stringify(response.data, null, 2)
-    } : null,
-    error: error ? {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data ? JSON.stringify(error.response.data, null, 2) : null
-    } : null
-  };
-
-  debugLogs.unshift(debugEntry);
-  if (debugLogs.length > 200) debugLogs.pop();
-
-  console.log('\n' + '='.repeat(80));
-  console.log(` DEBUG [${debugEntry.timestamp}]`);
-  console.log(` ACTION: ${action}`);
-  console.log(` REQUEST: ${method} ${url}`);
-  console.log(`   URL: ${url}`);
-  console.log(`   METHOD: ${method}`);
-  console.log(`   HEADERS:`, JSON.stringify(headers, null, 2));
-  
-  if (data) console.log(`   BODY:`, JSON.stringify(data, null, 2));
-  
-  if (error) {
-    console.log(`❌ ERROR: ${error.message}`);
-  } else if (response) {
-    console.log(`✅ RESPONSE: ${response.status}`);
-    console.log(`   STATUS: ${response.status}`);
-    console.log(`   DATA:`, JSON.stringify(response.data, null, 2));
-  }
-  console.log('='.repeat(80) + '\n');
-}
-
-// Activity logging
-function logActivity(message) {
-  const timestamp = new Date().toISOString();
-  const logEntry = { timestamp, message };
-
-  userData.logs.unshift(logEntry);
-  userData.logs = userData.logs.slice(0, 1000);
-  
-  console.log(`[${timestamp}] ${message}`);
-}
-
-// Get proxy configuration for axios
-function getAxiosConfig() {
-  const config = {
-    timeout: 30000,
-    httpsAgent: new (require('https').Agent)({
-      rejectUnauthorized: false,
-      keepAlive: true
-    })
-  };
-  
-  if (PROXY_CONFIG.enabled && PROXY_CONFIG.host) {
-    const proxyUrl = `http://${PROXY_CONFIG.username}:${PROXY_CONFIG.password}@${PROXY_CONFIG.host}:${PROXY_CONFIG.port}`;
-    config.httpsAgent = new HttpsProxyAgent(proxyUrl);
-    config.httpAgent = new HttpsProxyAgent(proxyUrl);
-    config.proxy = false;
-    
-    console.log(`🔌 Proxy enabled via agent: ${PROXY_CONFIG.host}:${PROXY_CONFIG.port}`);
+function scheduleReconnect() {
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log("❌ Max reconnection attempts reached");
+    return;
   }
   
-  return config;
-}
-
-// ======================= API REQUEST FUNCTION WITH PROXY =======================
-async function makeAPIRequest(url, method = 'GET', headers = {}, data = null) {
-  try {
-    debugLog('SENDING_REQUEST', url, method, headers, data);
-    
-    const axiosConfig = {
-      method: method.toLowerCase(),
-      url: url,
-      headers: {
-        'Content-Type': 'application/json',
-        ...headers
-      },
-      data: data,
-      ...getAxiosConfig()
-    };
-
-    const response = await axios(axiosConfig);
-
-    debugLog('REQUEST_SUCCESS', url, method, headers, data, response);
-    return { success: true, data: response.data, status: response.status };
-    
-  } catch (error) {
-    debugLog('REQUEST_ERROR', url, method, headers, data, null, error);
-    return {
-      success: false,
-      error: error.message,
-      status: error.response?.status,
-      responseData: error.response?.data
-    };
-  }
-}
-
-// ======================= SCHEDULING FUNCTIONS =======================
-
-// Check if it's weekend (Saturday or Sunday)
-function isWeekend(date = new Date()) {
-  const day = date.getUTCDay(); // 0 = Sunday, 6 = Saturday
-  return day === 0 || day === 6;
-}
-
-// Get scheduling parameters for specific date
-function getSchedulingParams(date = new Date()) {
-  if (isWeekend(date)) {
-    return {
-      dayStart: userData.weekendDayStart,
-      dayEnd: userData.weekendDayEnd,
-      jitter: userData.weekendJitter,
-      baseInterval: userData.weekendBaseInterval,
-      randomScale1: userData.weekendRandomScale1,
-      randomScale2: userData.weekendRandomScale2
-    };
-  } else {
-    return {
-      dayStart: userData.dayStart,
-      dayEnd: userData.dayEnd,
-      jitter: userData.jitter,
-      baseInterval: userData.baseInterval,
-      randomScale1: userData.randomScale1,
-      randomScale2: userData.randomScale2
-    };
-  }
-}
-
-// Convert CET to UTC (CET = UTC+1)
-function cetToUTC(cetTime) {
-  const [hours, minutes] = cetTime.split(':').map(Number);
-  let utcHours = hours - 1; // CET to UTC
-  if (utcHours < 0) utcHours += 24;
-  return { hours: utcHours, minutes };
-}
-
-// Create date at specific UTC time
-function utcDateAt(hour, minute, second = 0, ms = 0, date = new Date()) {
-  const d = new Date(date);
-  d.setUTCHours(hour, minute, second, ms);
-  return d;
-}
-
-// Add minutes to date
-function addMinutes(date, minutes) {
-  return new Date(date.getTime() + minutes * 60000);
-}
-
-// Add milliseconds to date
-function addMs(date, ms) {
-  return new Date(date.getTime() + ms);
-}
-
-// Check if within active window
-function isWithinActiveWindow() {
-  if (!userData._effectiveStartUTC || !userData._effectiveEndUTC) {
-    computeEffectiveWindow();
-  }
-
-  const now = new Date();
-  return now >= userData._effectiveStartUTC && now <= userData._effectiveEndUTC;
-}
-
-// Compute effective window for today
-function computeEffectiveWindow(date = new Date()) {
-  const params = getSchedulingParams(date);
-  const cetStart = cetToUTC(params.dayStart);
-  const cetEnd = cetToUTC(params.dayEnd);
+  const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000);
+  console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
   
-  let effectiveStart = utcDateAt(cetStart.hours, cetStart.minutes, 0, 0, date);
-  let effectiveEnd = utcDateAt(cetEnd.hours, cetEnd.minutes, 0, 0, date);
-  
-  // Handle midnight crossing
-  if (effectiveEnd <= effectiveStart) {
-    effectiveEnd = addMinutes(effectiveEnd, 24 * 60);
-  }
-  
-  // Add jitter (±jitter minutes)
-  const jitterMs = (params.jitter * 60000);
-  const randomJitter = Math.floor(Math.random() * (2 * jitterMs + 1)) - jitterMs;
-  effectiveStart = addMs(effectiveStart, randomJitter);
-  
-  userData._effectiveStartUTC = effectiveStart;
-  userData._effectiveEndUTC = effectiveEnd;
-  userData._startJitterMin = Math.round(randomJitter / 60000);
-  
-  logActivity(`📅 Effective window: ${effectiveStart.toUTCString()} to ${effectiveEnd.toUTCString()} (jitter: ${userData._startJitterMin}m)`);
-  
-  return { effectiveStart, effectiveEnd };
-}
-
-// Calculate next spray time
-function calculateNextSprayTime() {
-  const params = getSchedulingParams();
-  
-  // Convert to milliseconds
-  const baseIntervalMs = params.baseInterval * 60000;
-  const randomScale1Ms = params.randomScale1 * 60000;
-  const randomScale2Ms = params.randomScale2 * 60000;
-  
-  const randomAddMs = Math.floor(
-    Math.random() * (randomScale2Ms - randomScale1Ms) + randomScale1Ms
-  );
-
-  const totalDelayMs = baseIntervalMs + randomAddMs;
-  const nextSprayTime = new Date(Date.now() + totalDelayMs);
-  userData.nextSprayTime = nextSprayTime.toISOString();
-
-  logActivity(`⏰ Next spray in ${Math.round(totalDelayMs / 60000)} minutes (at ${nextSprayTime.toUTCString()})`);
-  
-  return nextSprayTime;
-}
-
-// ======================= CORE API FUNCTIONS =======================
-
-// Token refresh
-async function refreshToken() {
-  if (!CONFIG.PHOENIX) {
-    logActivity('ERROR: No refresh token configured');
-    return false;
-  }
-
-  const headers = { 'Content-Type': 'application/json' };
-  const requestData = { refreshToken: CONFIG.PHOENIX };
-
-  logActivity('Starting token refresh...');
-  const result = await makeAPIRequest(CONFIG.URL_REF, 'POST', headers, requestData);
-
-  if (result.success && result.data.data?.jwt) {
-    userData.jwtToken = result.data.data.jwt;
-    userData.lastRefresh = new Date().toISOString();
-    userData.isActive = true;
-
-    if (result.data.data?.refreshToken && result.data.data.refreshToken !== 'Not provided') {
-      logActivity('New refresh token received');
-    }
-
-    logActivity('✅ Token refresh successful');
-    
-    // Schedule next token refresh
-    scheduleNextTokenRefresh();
-    
-    return true;
-  } else {
-    logActivity(`❌ Token refresh failed: ${result.error}`);
-    userData.isActive = false;
-    return false;
-  }
-}
-
-// Schedule next token refresh
-function scheduleNextTokenRefresh() {
-  // Always refresh at 06:07 UTC (07:07 CET)
-  const now = new Date();
-  let nextRefresh = utcDateAt(6, 7, 0, 0);
-  
-  // If already past today's refresh time, schedule for tomorrow
-  if (now >= nextRefresh) {
-    nextRefresh = addMinutes(nextRefresh, 24 * 60);
-  }
-  
-  // Add jitter (±jitter minutes)
-  const jitterMs = (userData.jitter * 60000);
-  const randomJitter = Math.floor(Math.random() * (2 * jitterMs + 1)) - jitterMs;
-  nextRefresh = addMs(nextRefresh, randomJitter);
-  
-  const delay = Math.max(nextRefresh.getTime() - Date.now(), 1000);
-  
-  setTimeout(async () => {
-    logActivity(`🔄 Scheduled token refresh (jitter: ${Math.round(randomJitter/60000)}m)`);
-    await refreshToken();
+  reconnectTimeout = setTimeout(() => {
+    reconnectAttempts++;
+    connectWebSocket();
   }, delay);
-  
-  logActivity(`⏰ Next token refresh scheduled for: ${nextRefresh.toUTCString()}`);
 }
 
-// Check funds
-async function checkFunds() {
-  if (!userData.jwtToken) {
-    logActivity('ERROR: No JWT token available for funds check');
-    return null;
-  }
+// ======================= MAIN WEBSOCKET CONNECTION =======================
+function connectWebSocket() {
+  cleanupSocket();
 
-  const headers = { 'x-user-jwt': userData.jwtToken };
-  const result = await makeAPIRequest(CONFIG.URL_NAL, 'GET', headers);
+  const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
   
-  if (result.success && result.data.data) {
-    const silvercoins = result.data.data.silvercoins || 0;
-    userData.lastFunds = silvercoins;
-    userData.dailyFundsChecks++;
-    logActivity(`💰 Funds: ${silvercoins.toLocaleString()} silvercoins`);
-    return silvercoins;
-  } else {
-    if (result.status === 401) {
-      logActivity('JWT expired during funds check, attempting refresh...');
-      const refreshSuccess = await refreshToken();
-      if (refreshSuccess) {
-        return await checkFunds();
-      }
-    }
-    logActivity(`❌ Funds check failed: ${result.error}`);
-    return null;
-  }
-}
-
-// Claim achievements
-async function claimAchievements() {
-  if (!userData.jwtToken) {
-    logActivity('ERROR: No JWT token available for achievements');
-    return 0;
-  }
-
-  const headers = { 'x-user-jwt': userData.jwtToken };
-  const userAchievementsUrl = `${CONFIG.URL_A4IV}/${CONFIG.MY_ID}/user`;
+  console.log(`🔄 Attempting connection to: ${wsUrl} (Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
   
-  logActivity('🎯 Starting achievements claim process...');
-
-  try {
-    // Get available achievements
-    const achievementsResult = await makeAPIRequest(userAchievementsUrl, 'GET', headers);
-    
-    if (!achievementsResult.success) {
-      if (achievementsResult.status === 401) {
-        logActivity('JWT expired during achievements check, attempting refresh...');
-        const refreshSuccess = await refreshToken();
-        if (refreshSuccess) {
-          return await claimAchievements();
-        }
-      }
-      logActivity(`❌ Achievements check failed: ${achievementsResult.error}`);
-      return 0;
-    }
-
-    const validIDs = [];
-    const categories = ['achievements', 'daily', 'weekly', 'monthly'];
-
-    // Collect claimable achievement IDs
-    categories.forEach((category) => {
-      if (achievementsResult.data.data[category]) {
-        achievementsResult.data.data[category].forEach((item) => {
-          if (item.progress?.claimAvailable) {
-            validIDs.push(item.id);
-          }
-        });
-      }
-    });
-
-    if (validIDs.length === 0) {
-      logActivity('ℹ️ No achievements available to claim');
-      return 0;
-    }
-
-    // Claim achievements
-    let totalClaimed = 0;
-    for (const achievementId of validIDs) {
-      const claimUrl = `${CONFIG.URL_A4IV}/${achievementId}/claim/`;
-      const claimResult = await makeAPIRequest(claimUrl, 'POST', headers);
-      
-      if (claimResult.success) {
-        totalClaimed++;
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 800));
-    }
-
-    userData.achievementsClaimed += totalClaimed;
-    logActivity(`🎉 Successfully claimed ${totalClaimed} achievements`);
-    return totalClaimed;
-
-  } catch (error) {
-    logActivity(`❌ Error in achievements process: ${error.message}`);
-    return 0;
-  }
-}
-
-// Execute scheduled spray (free spray - no purchase)
-async function executeScheduledSpray(sprayerId) {
-  if (!userData.jwtToken) {
-    logActivity('ERROR: No JWT token available for scheduled spray');
-    calculateNextSprayTime();
-    return null;
-  }
-
-  if (!isWithinActiveWindow()) {
-    logActivity('⏰ Outside active window, skipping scheduled spray');
-    return null;
-  }
-
-  logActivity(`🎰 Executing scheduled free spray with sprayerId: ${sprayerId}...`);
-
-  try {
-    const headers = {
-      'x-user-jwt': userData.jwtToken,
-      'Content-Type': 'application/json'
-    };
-
-    const sprayResult = await makeAPIRequest(CONFIG.URL_SPRAY, 'POST', headers, { spinnerId: parseInt(sprayerId) });
-
-    if (!sprayResult.success) {
-      if (sprayResult.status === 401) {
-        logActivity('JWT expired during spray, attempting refresh...');
-        await refreshToken();
-      }
-      logActivity(`⚠️ Scheduled spray failed: ${sprayResult.error}`);
-    } else {
-      const sprayData = sprayResult.data.data;
-      const resultId = sprayData.id;
-      const prizeName = PRIZE_MAP[resultId] || `ID = ${resultId}`;
-      userData.sprayCount++;
-      logActivity(`🎉 Scheduled spray successful! Received: ${prizeName}`);
-      
-      // Additional API calls
-      await makeAPIRequest(CONFIG.URL_PACKNUM, 'GET', headers);
-      const sprayerUserUrl = `${CONFIG.URL_SPRAYER}/user`;
-      await makeAPIRequest(sprayerUserUrl, 'GET', headers);
-      const sprayerHistoryUrl = `${CONFIG.URL_SPRAYER}/history?categoryId=1`;
-      await makeAPIRequest(sprayerHistoryUrl, 'GET', headers);
-      
-      return prizeName;
-    }
-  } catch (error) {
-    logActivity(`❌ Scheduled spray error: ${error.message}`);
-  } finally {
-    calculateNextSprayTime();
-  }
-
-  return null;
-}
-
-// MANUAL SPRAY FUNCTION - with buy spray logic
-async function executeManualSpray(sprayerId) {
-  if (!userData.jwtToken) {
-    logActivity('ERROR: No JWT token available for manual spray');
-    return { success: false, error: 'No JWT token available' };
-  }
-
-  logActivity(`🎰 Starting manual spray process with sprayerId: ${sprayerId}...`);
-
-  try {
-    const headers = {
-      'x-user-jwt': userData.jwtToken,
-      'Content-Type': 'application/json'
-    };
-
-    // 1. First, check sprayer user data
-    const sprayerUserUrl = `${CONFIG.URL_SPRAYER}/user`;
-    const sprayerUserResult = await makeAPIRequest(sprayerUserUrl, 'GET', headers);
-
-    if (!sprayerUserResult.success) {
-      if (sprayerUserResult.status === 401) {
-        logActivity('JWT expired during sprayer check, attempting refresh...');
-        const refreshSuccess = await refreshToken();
-        if (refreshSuccess) {
-          return await executeManualSpray(sprayerId);
-        }
-      }
-      return { success: false, error: `Sprayer check failed: ${sprayerUserResult.error}` };
-    }
-
-    // 2. Check if we need to buy a spray
-    const totalLeft = sprayerUserResult.data.data?.totalLeft || 0;
-    
-    if (totalLeft === 0) {
-      logActivity('🛒 No free sprays left, buying a spray...');
-      
-      // Buy a spray
-      const buySprayUrl = `${CONFIG.URL_SPRAYER}/buy-spin?categoryId=1`;
-      const buySprayResult = await makeAPIRequest(buySprayUrl, 'POST', headers, {
-        categoryId: 1,
-        amount: 1
-      });
-
-      if (!buySprayResult.success) {
-        return { success: false, error: `Buy spray failed: ${buySprayResult.error}` };
-      }
-      
-      logActivity('✅ Spray purchased successfully');
-    } else if (totalLeft === 1) {
-      logActivity('🎉 Free spray available, skipping purchase');
-    }
-
-    // 3. Now execute the spray
-    const sprayUrl = `${CONFIG.URL_SPRAYER}/spin?categoryId=1`;
-    const sprayResult = await makeAPIRequest(sprayUrl, 'POST', headers, {
-      spinnerId: parseInt(sprayerId)
-    });
-
-    if (!sprayResult.success) {
-      return { success: false, error: `Spray failed: ${sprayResult.error}` };
-    }
-
-    // 4. Process the result
-    const sprayData = sprayResult.data.data;
-    const resultId = sprayData.id;
-    const prizeName = PRIZE_MAP[resultId] || `ID = ${resultId}`;
-    userData.sprayCount++;
-    
-    logActivity(`🎉 Manual spray successful! Received: ${prizeName}`);
-    return { success: true, prize: prizeName, prizeId: resultId };
-    
-  } catch (error) {
-    logActivity(`❌ Manual spray error: ${error.message}`);
-    return { success: false, error: error.message };
-  }
-}
-
-// Execute multiple sprays
-async function executeMultipleSprays(count, sprayerId) {
-  const results = [];
-  let successful = 0;
-  let failed = 0;
+  const wsKey = generateWebSocketKey();
   
-  // First, check initial funds
-  const initialFunds = await checkFunds();
-  
-  for (let i = 0; i < count; i++) {
-    try {
-      logActivity(`🔄 Manual spray ${i + 1}/${count} starting...`);
-      const result = await executeManualSpray(sprayerId);
-      results.push({
-        spray: i + 1,
-        success: result.success,
-        prize: result.prize,
-        prizeId: result.prizeId,
-        timestamp: new Date().toISOString()
-      });
-      
-      if (result.success) {
-        successful++;
-      } else {
-        failed++;
-      }
-      
-      // Add delay between sprays
-      if (i < count - 1) {
-        await new Promise(resolve => setTimeout(resolve, 2700));
-      }
-      
-    } catch (error) {
-      results.push({
-        spray: i + 1,
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-      failed++;
-    }
-  }
-  
-  // Check final funds
-  const finalFunds = await checkFunds();
-  
-  // Calculate statistics
-  const fundsSpent = (initialFunds || 0) - (finalFunds || 0);
-  const silverPerSpray = successful > 0 ? fundsSpent / successful : 0;
-  const totalSilverValue = count * 1000;
-  const returnPercentage = totalSilverValue > 0 ? ((totalSilverValue - fundsSpent) / totalSilverValue) * 100 : 0;
-  
-  return {
-    success: true,
-    summary: {
-      totalRequested: count,
-      successful,
-      failed,
-      initialFunds: initialFunds || 0,
-      finalFunds: finalFunds || 0,
-      fundsSpent,
-      silverPerSpray,
-      returnPercentage: returnPercentage.toFixed(2)
+  const options = {
+    headers: {
+      "accept-language": "en,ru;q=0.9,uk;q=0.8,ro;q=0.7,en-GB;q=0.6,fr;q=0.5",
+      "cache-control": "no-cache",
+      "pragma": "no-cache",
+      "sec-websocket-extensions": "permessage-deflate; client_max_window_bits",
+      "sec-websocket-key": wsKey,
+      "sec-websocket-version": "13",
+      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "origin": "https://kolex.gg",
+      "host": "sockets.kolex.gg"
     },
-    results
+    handshakeTimeout: 15000,
+    timeout: 30000,
+    rejectUnauthorized: true,
+    followRedirects: true
   };
-}
 
-// Get user packs with pagination
-async function getUserPacks() {
-  if (!userData.jwtToken) {
-    return { success: false, error: 'No JWT token available' };
+  // Use proxy for WebSocket if available
+  if (proxyAgent) {
+    options.agent = proxyAgent;
   }
-  
-  const headers = { 'x-user-jwt': userData.jwtToken };
-  
-  try {
-    let allPacks = [];
-    let page = 1;
-    let hasMore = true;
+
+  socket = new WebSocket(wsUrl, options);
+
+  socket.on("open", () => {
+    console.log(`🟢 WebSocket Connected to ${wsUrl}`);
+    sendToDebugChannel(`🟢 WebSocket Connected to Kolex.gg`);
     
-    while (hasMore) {
-      const url = `${CONFIG.URL_PACK4EK}?page=${page}&categoryIds=1%2C73`;
-      const result = await makeAPIRequest(url, 'GET', headers);
-      
-      if (!result.success) {
-        if (page === 1) {
-          return result;
-        } else {
-          break;
-        }
+    reconnectAttempts = 0;
+    lastMessageTime = Date.now();
+    
+    pingInterval = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send("2");
+        console.log("📤 Sent ping (2)");
       }
-      
-      if (result.data.data?.packs) {
-        allPacks = allPacks.concat(result.data.data.packs);
-        
-        if (result.data.data.packs.length === 0 || 
-            (result.data.data.count * page) >= result.data.data.total) {
-          hasMore = false;
-        } else {
-          page++;
-        }
-      } else {
-        hasMore = false;
+    }, 15000);
+    
+    heartbeatInterval = setInterval(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send('42["heartbeat"]');
+        console.log("💓 Sent heartbeat");
       }
-    }
+    }, 30000);
     
-    return { success: true, data: { packs: allPacks } };
-    
-  } catch (error) {
-    return { success: false, error: error.message };
-  }
-}
+    setTimeout(() => {
+      if (socket?.readyState === WebSocket.OPEN) {
+        socket.send('42["join-public-feed"]');
+        console.log("📤 Sent join-public-feed message");
+      }
+    }, 1000);
+  });
 
-// Open a pack
-async function openPack(packId) {
-  if (!userData.jwtToken) {
-    return { success: false, error: 'No JWT token available' };
-  }
-  
-  const headers = {
-    'x-user-jwt': userData.jwtToken,
-    'Content-Type': 'application/json'
-  };
-  
-  const url = CONFIG.URL_PACK0PEN;
-  const data = { categoryId: 1, packId };
-  
-  return await makeAPIRequest(url, 'POST', headers, data);
-}
+  socket.on("close", (code, reason) => {
+    console.log(`🔴 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
+    sendToDebugChannel(`🔴 WebSocket Disconnected (Code: ${code})`);
+    cleanupSocket();
+    scheduleReconnect();
+  });
 
-// Get card template details
-async function getCardTemplates(templateIds) {
-  if (!userData.jwtToken || templateIds.length === 0) {
-    return { success: false, error: 'No token or empty template IDs' };
-  }
-  
-  const headers = { 'x-user-jwt': userData.jwtToken };
-  const idsParam = templateIds.join('%2C');
-  const url = `${CONFIG.URL_CARD_TEMPLATE}?ids=${idsParam}`;
-  
-  return await makeAPIRequest(url, 'GET', headers);
-}
+  socket.on("error", (err) => {
+    console.error(`WebSocket Error:`, err.message);
+    sendToDebugChannel(`❗ WebSocket Error: ${err.message}`);
+  });
 
-// ======================= MARKET LISTING FUNCTIONS =======================
-
-// List a single card on the market
-async function listCardOnMarket(cardId, jwtToken, price) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'x-user-jwt': jwtToken
-  };
-  
-  const body = {
-    id: parseInt(cardId),
-    type: "card",
-    price: price.toString()
-  };
-  
-  const result = await makeAPIRequest(CONFIG.URL_MARKET_LIST, 'POST', headers, body);
-  
-  if (result.success && result.data) {
-    // Extract marketId from various possible response structures
-    let marketId = null;
-    if (result.data.data && result.data.data.marketId) {
-      marketId = result.data.data.marketId;
-    } else if (result.data.marketId) {
-      marketId = result.data.marketId;
-    } else if (result.data.data && result.data.data.data && result.data.data.data.marketId) {
-      marketId = result.data.data.data.marketId;
-    }
-    
-    return {
-      success: true,
-      marketId: marketId,
-      response: result.data
-    };
-  }
-  
-  return {
-    success: false,
-    error: result.error || 'Failed to list card',
-    response: result.responseData
-  };
-}
-
-// Execute multiple market listings
-async function executeMarketListings(cardIds, prices, jwtToken, delayMs, onProgress) {
-  const results = [];
-  let successful = 0;
-  let failed = 0;
-  let marketIds = [];
-  
-  for (let i = 0; i < cardIds.length; i++) {
-    const cardId = cardIds[i];
-    // Use corresponding price or repeat last price
-    let price = prices[i];
-    if (!price && prices.length > 0) {
-      price = prices[prices.length - 1];
-    }
-    
+  socket.on("message", (rawData) => {
     try {
-      const result = await listCardOnMarket(cardId, jwtToken, price);
+      const data = rawData.toString();
+      lastMessageTime = Date.now();
       
-      if (result.success) {
-        successful++;
-        marketIds.push({
-          cardId: cardId,
-          marketId: result.marketId,
-          price: price
-        });
-        results.push({
-          index: i + 1,
-          cardId: cardId,
-          price: price,
-          success: true,
-          marketId: result.marketId,
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        failed++;
-        results.push({
-          index: i + 1,
-          cardId: cardId,
-          price: price,
-          success: false,
-          error: result.error,
-          timestamp: new Date().toISOString()
-        });
-      }
-    } catch (error) {
-      failed++;
-      results.push({
-        index: i + 1,
-        cardId: cardId,
-        price: price,
-        success: false,
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-    
-    // Progress callback
-    if (onProgress) {
-      onProgress(i + 1, cardIds.length, successful, failed, marketIds);
-    }
-    
-    // Delay between requests (except after last)
-    if (i < cardIds.length - 1 && delayMs > 0) {
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-  }
-  
-  return {
-    success: true,
-    summary: {
-      total: cardIds.length,
-      successful: successful,
-      failed: failed
-    },
-    marketIds: marketIds,
-    results: results
-  };
-}
-
-// ======================= BREWING FUNCTIONS =======================
-
-// Check user funds for brewing
-async function checkUserFunds() {
-  if (!userData.jwtToken) {
-    return { success: false, error: 'No JWT token available' };
-  }
-
-  const headers = { 'x-user-jwt': userData.jwtToken };
-  const result = await makeAPIRequest(CONFIG.URL_NAL, 'GET', headers);
-  
-  if (result.success && result.data.data) {
-    return { success: true, balance: result.data.data.silvercoins || 0 };
-  } else {
-    return { success: false, error: result.error };
-  }
-}
-
-// Get collection cards
-async function getCollectionCards(collectionId, minMintNumber) {
-  if (!userData.jwtToken || !CONFIG.MY_ID) {
-    return { success: false, error: 'No JWT token or user ID available' };
-  }
-
-  const headers = { 'x-user-jwt': userData.jwtToken };
-  const url = `${CONFIG.URL_COLLECTIONS}/${collectionId}/users/${CONFIG.MY_ID}/owned2`;
-  
-  const result = await makeAPIRequest(url, 'GET', headers);
-  
-  if (!result.success) {
-    return { success: false, error: result.error };
-  }
-
-  let cards = [];
-  if (result.data?.data?.cards) {
-    cards = result.data.data.cards;
-  } else if (Array.isArray(result.data?.data)) {
-    cards = result.data.data;
-  } else if (Array.isArray(result.data)) {
-    cards = result.data;
-  }
-
-  // Filter and format cards
-  const filteredCards = cards
-    .filter(card => {
-      if (minMintNumber && card.mintNumber) {
-        return parseInt(card.mintNumber) >= minMintNumber;
-      }
-      return true;
-    })
-    .filter(card => 
-      card.status === 'available'
-    )
-    .map(card => ({
-      id: card.id,
-      mintBatch: card.mintBatch || '',
-      mintNumber: card.mintNumber || 0,
-      status: card.status,
-      rating: card.rating || 'N/A',
-      collectionId: collectionId
-    }));
-
-  return { success: true, cards: filteredCards };
-}
-
-// Execute brewing
-async function executeBrewing(brewingPlanId, silvercoins, minMintNumber, maxBrews, operationDelay, stopRequestRef) {
-  if (!userData.jwtToken) {
-    return { success: false, error: 'No JWT token available' };
-  }
-
-  const results = {
-    logs: [],
-    totalBrews: 0,
-    successfulBrews: 0,
-    cardsReceived: []
-  };
-
-  function addLog(message, type = 'info') {
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      message,
-      type
-    };
-    results.logs.push(logEntry);
-    console.log(`[BREW] ${message}`);
-  }
-
-  addLog('🚀 Starting brewing process...', 'info');
-  
-  try {
-    // Step 1: Check funds
-    addLog('💰 Checking silver balance...', 'info');
-    const fundsResult = await checkUserFunds();
-    if (!fundsResult.success) {
-      addLog(`❌ Failed to check funds: ${fundsResult.error}`, 'error');
-      return { success: false, error: fundsResult.error, logs: results.logs };
-    }
-    
-    const initialSilver = fundsResult.balance;
-    addLog(`💰 Initial silver balance: ${initialSilver.toLocaleString()}`, 'success');
-
-    // Step 2: Scan collections
-    addLog('🔍 Scanning collections for available cards...', 'info');
-    
-    const cardsByRequirement = {};
-    const cardsWithDetails = {};
-
-    for (const [requirementId, config] of Object.entries(BREWING_CONFIG)) {
-      if (stopRequestRef.stopped) {
-        addLog('⏹️ Brewing stopped by user', 'warning');
-        break;
+      if (data === "2") {
+        socket.send("3");
+        return;
       }
 
-      addLog(`📦 Collecting cards for requirement ${requirementId} (${config.cardsPerBrew} cards per brew)...`, 'info');
-      
-      const cards = [];
-      for (const collectionId of config.collectionIds) {
-        if (stopRequestRef.stopped) break;
+      if (data === "3") {
+        return;
+      }
 
-        const collectionResult = await getCollectionCards(collectionId, minMintNumber);
-        
-        if (collectionResult.success) {
-          addLog(`  - Collection ${collectionId}: ${collectionResult.cards.length} available cards`, 'info');
+      if (data.startsWith("0")) {
+        console.log("🤝 Socket.io handshake received");
+        return;
+      }
+
+      if (data.startsWith("40")) {
+        console.log("🔌 Socket.io connected");
+        return;
+      }
+
+      if (data.startsWith("42")) {
+        try {
+          const payload = data.substring(2);
+          const parsed = JSON.parse(payload);
           
-          collectionResult.cards.forEach(card => {
-            cardsWithDetails[card.id] = card;
-          });
-          
-          cards.push(...collectionResult.cards.map(card => card.id));
-        } else {
-          addLog(`  ⚠️ Failed to fetch collection ${collectionId}: ${collectionResult.error}`, 'warning');
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-
-      cardsByRequirement[requirementId] = cards;
-    }
-
-    if (stopRequestRef.stopped) {
-      return { success: false, stopped: true, logs: results.logs };
-    }
-
-    // Calculate possible brews
-    let possibleBrews = maxBrews;
-    for (const [requirementId, cards] of Object.entries(cardsByRequirement)) {
-      const cardsNeeded = BREWING_CONFIG[requirementId].cardsPerBrew;
-      const possibleForReq = Math.floor(cards.length / cardsNeeded);
-      if (possibleForReq < possibleBrews) {
-        possibleBrews = possibleForReq;
-      }
-    }
-
-    const fundBasedBrews = Math.floor(initialSilver / silvercoins);
-    const actualBrews = Math.min(possibleBrews, fundBasedBrews, maxBrews);
-
-    addLog(`📊 Based on cards: Can perform ${possibleBrews} brewing operation(s)`, 'info');
-    addLog(`💰 Based on funds: Can afford ${fundBasedBrews} brewing operation(s)`, 'info');
-    addLog(`✅ Will perform ${actualBrews} brewing operation(s)`, 'success');
-
-    if (actualBrews === 0) {
-      addLog('❌ No brews possible', 'error');
-      return { success: false, logs: results.logs };
-    }
-
-    // Sort cards by mint number (descending to use highest mints first)
-    const sortedCardsByRequirement = {};
-    for (const [reqId, cardIds] of Object.entries(cardsByRequirement)) {
-      sortedCardsByRequirement[reqId] = cardIds
-        .map(id => ({ id, details: cardsWithDetails[id] }))
-        .filter(item => item.details)
-        .sort((a, b) => b.details.mintNumber - a.details.mintNumber)
-        .map(item => item.id);
-    }
-
-    const usedCardIds = new Set();
-
-    // Perform brews
-    for (let brewNum = 1; brewNum <= actualBrews; brewNum++) {
-      if (stopRequestRef.stopped) {
-        addLog('⏹️ Brewing stopped by user', 'warning');
-        break;
-      }
-
-      addLog(`🍺 Processing brew ${brewNum}/${actualBrews}...`, 'brew-header');
-
-      try {
-        // Check funds before each brew
-        const currentFundsResult = await checkUserFunds();
-        if (!currentFundsResult.success || currentFundsResult.balance < silvercoins) {
-          addLog(`❌ Insufficient funds for brew ${brewNum}`, 'error');
-          break;
-        }
-
-        // Prepare requirements
-        const requirements = [];
-        const usedCardsInThisBrew = [];
-
-        for (const [reqId, config] of Object.entries(BREWING_CONFIG)) {
-          const availableCards = (sortedCardsByRequirement[reqId] || [])
-            .filter(id => !usedCardIds.has(id));
-
-          if (availableCards.length < config.cardsPerBrew) {
-            throw new Error(`Not enough cards for requirement ${reqId}`);
-          }
-
-          const selectedCardIds = availableCards.slice(0, config.cardsPerBrew);
-          selectedCardIds.forEach(id => {
-            usedCardIds.add(id);
-            usedCardsInThisBrew.push(id);
-          });
-
-          requirements.push({
-            requirementId: parseInt(reqId),
-            entityIds: selectedCardIds
-          });
-        }
-
-        // Execute brew
-        const headers = {
-          'x-user-jwt': userData.jwtToken,
-          'Content-Type': 'application/json'
-        };
-
-        const brewUrl = `${CONFIG.URL_BREW}/plans/${brewingPlanId}`;
-        const brewData = { requirements, silvercoins };
-
-        const brewResult = await makeAPIRequest(brewUrl, 'POST', headers, brewData);
-
-        if (!brewResult.success) {
-          // Remove used cards if brew failed
-          usedCardsInThisBrew.forEach(id => usedCardIds.delete(id));
-          addLog(`❌ Brew ${brewNum} failed: ${brewResult.error}`, 'error');
-          continue;
-        }
-
-        addLog(`✅ Brew ${brewNum} request successful!`, 'success');
-
-        // Open slots
-        const slots = brewResult.data.data?.slots || [];
-        if (slots.length > 0) {
-          addLog(`📦 Opening ${slots.length} slot(s)...`, 'info');
-
-          for (let slotIndex = 0; slotIndex < slots.length; slotIndex++) {
-            if (stopRequestRef.stopped) break;
-
-            const slotId = slots[slotIndex].id;
-            const slotUrl = `${CONFIG.URL_BREW}/slots/${slotId}/open-instant`;
-            const slotResult = await makeAPIRequest(slotUrl, 'POST', headers);
-
-            if (slotResult.success && slotResult.data.data?.cards?.length > 0) {
-              const card = slotResult.data.data.cards[0];
-              const cardInfo = `${card.mintBatch || ''}${card.mintNumber || ''}`.trim();
-              addLog(`  Slot ${slotIndex + 1}: Got ${cardInfo} (Rating: ${card.rating || 'N/A'})`, 'success');
+          if (Array.isArray(parsed) && parsed.length >= 2) {
+            const [eventName, eventData] = parsed;
+            
+            if (eventName === "join-public-feed") {
+              console.log("✅ Successfully joined public feed");
+              return;
+            }
+            
+            if (eventName && eventData) {
+              eventData.event = eventName;
               
-              results.cardsReceived.push({
-                mintBatch: card.mintBatch || '',
-                mintNumber: card.mintNumber || 'N/A',
-                rating: card.rating || 'N/A'
-              });
-            } else {
-              addLog(`  Slot ${slotIndex + 1}: Opened successfully`, 'success');
-            }
-
-            if (slotIndex < slots.length - 1 && !stopRequestRef.stopped) {
-              await new Promise(resolve => setTimeout(resolve, 2000));
+              if (shouldProcessEvent(eventName)) {
+                processEventChannels(eventData);
+              }
             }
           }
+        } catch (parseError) {
+          console.error("Error parsing Socket.io message:", parseError.message);
         }
-
-        results.successfulBrews++;
-        results.totalBrews++;
-
-        if (brewNum < actualBrews && !stopRequestRef.stopped) {
-          await new Promise(resolve => setTimeout(resolve, operationDelay));
-        }
-
-      } catch (error) {
-        addLog(`❌ Error in brew ${brewNum}: ${error.message}`, 'error');
+        return;
       }
+      
+      if (data.length < 100) {
+        console.log("📨 Unknown message:", data);
+      }
+      
+    } catch (error) {
+      console.error("Error processing message:", error);
+      sendToDebugChannel(`❌ Processing Error: ${error.message}`);
     }
+  });
+}
 
-    // Final funds check
-    const finalFundsResult = await checkUserFunds();
-    if (finalFundsResult.success) {
-      const silverSpent = initialSilver - finalFundsResult.balance;
-      addLog(`💰 Final silver balance: ${finalFundsResult.balance.toLocaleString()}`, 'info');
-      addLog(`💰 Total silver spent: ${silverSpent.toLocaleString()}`, 'info');
+function processEventChannels(eventData) {
+  CHANNEL_CONFIG.forEach((config) => {
+    try {
+      if (
+        (config.event === "all" || config.event === eventData.event) &&
+        (config.condition === null || config.condition(eventData))
+      ) {
+        const message = config.template(eventData);
+        if (message) {
+          sendToChannel(config.id, message);
+        }
+      }
+    } catch (error) {
+      console.error(`Error processing channel ${config.name}:`, error);
     }
+  });
+}
 
-    // Summary
-    addLog('=== BREWING COMPLETE ===', 'highlight');
-    addLog(`✅ Total brews: ${results.totalBrews}`, 'success');
-    addLog(`✅ Successful brews: ${results.successfulBrews}`, 'success');
-    
-    if (results.cardsReceived.length > 0) {
-      addLog('📊 Cards received:', 'summary-header');
-      results.cardsReceived.sort((a, b) => {
-        const numA = parseInt(a.mintNumber) || 0;
-        const numB = parseInt(b.mintNumber) || 0;
-        return numA - numB;
-      }).forEach(card => {
-        addLog(`  ${card.mintBatch}${card.mintNumber} (Rating: ${card.rating})`, 'small-font');
+function sendToChannel(channelId, message) {
+  if (!message) return;
+  
+  if (!discordReady) {
+    console.log(`⚠️ Discord not ready, cannot send to ${channelId}`);
+    return;
+  }
+  
+  const channel = client.channels.cache.get(channelId);
+  if (channel) {
+    if (message.length > 2000) {
+      const chunks = message.match(/.{1,1900}/g) || [];
+      chunks.forEach(chunk => {
+        channel.send(chunk).catch((err) => {
+          console.error(`Error sending to channel ${channelId}:`, err);
+        });
+      });
+    } else {
+      channel.send(message).catch((err) => {
+        console.error(`Error sending to channel ${channelId}:`, err);
       });
     }
-
-    return { success: true, ...results };
-
-  } catch (error) {
-    addLog(`❌ Brewing error: ${error.message}`, 'error');
-    return { success: false, error: error.message, logs: results.logs };
+  } else {
+    console.log(`❌ Channel ${channelId} not found in cache`);
   }
 }
 
-// ======================= SCHEDULING & INITIALIZATION =======================
-
-// Schedule daily plan
-function scheduleDailyPlan() {
-  // Clear existing timers
-  if (userData._achTimers) {
-    userData._achTimers.forEach(timer => clearTimeout(timer));
-  }
-  if (userData._dailyRolloverTimer) {
-    clearTimeout(userData._dailyRolloverTimer);
-  }
-  
-  userData._achTimers = [];
-  
-  // Compute today's window
-  const now = new Date();
-  const { effectiveStart, effectiveEnd } = computeEffectiveWindow(now);
-  
-  // Store the effective window (used by isWithinActiveWindow)
-  userData._effectiveStartUTC = effectiveStart;
-  userData._effectiveEndUTC = effectiveEnd;
-  
-  logActivity(`📅 Daily plan: ${effectiveStart.toUTCString()} to ${effectiveEnd.toUTCString()}`);
-  
-  // Schedule achievements
-  const claim1 = addMinutes(effectiveStart, 15);        // Start + 25m
-  const claim2 = addMinutes(claim1, 2 * 60);          // +6 hours from claim1
-  const claim3 = addMinutes(claim2, 3 * 60);          // +6 hours from claim1
-  const claim4 = addMinutes(claim3, 2 * 60);          // +6 hours from claim1
-  const claim5 = addMinutes(claim4, 3 * 60);          // +6 hours from claim1
-  const claim6 = addMinutes(claim5, 2 * 60);          // +6 hours from claim1
-  const claim7 = addMinutes(effectiveEnd, -15);        // End - 15m
-  
-  const scheduleClaim = (when, label) => {
-    const delay = when.getTime() - Date.now();
-    if (delay <= 0) {
-      logActivity(`⏭️ ${label} skipped (time passed)`);
-      return;
-    }
-    
-    const timer = setTimeout(async () => {
-      try {
-        if (userData.isActive) {
-          logActivity(`🏁 ${label} firing`);
-          await claimAchievements();
-        }
-      } catch (error) {
-        logActivity(`⚠️ ${label} error: ${error.message}`);
-      }
-    }, delay);
-    
-    userData._achTimers.push(timer);
-    logActivity(`⏰ ${label} scheduled for ${when.toUTCString()}`);
-  };
-  
-  scheduleClaim(claim1, 'A4 #1');
-  scheduleClaim(claim2, 'A4 #2');
-  scheduleClaim(claim3, 'A4 #3');
-  scheduleClaim(claim4, 'A4 #4');
-  scheduleClaim(claim5, 'A4 #5');
-  scheduleClaim(claim6, 'A4 #6');
-  scheduleClaim(claim7, 'A4 #7');
-  
-  // Schedule rollover for TOMORROW
-  const tomorrow = new Date(now);
-  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
-  
-  const tomorrowStart = utcDateAt(
-    effectiveStart.getUTCHours(),
-    effectiveStart.getUTCMinutes(),
-    0, 0,
-    tomorrow
-  );
-  
-  const rolloverTime = addMinutes(tomorrowStart, 2);
-  const rolloverDelay = Math.max(rolloverTime.getTime() - Date.now(), 1000);
-  
-  userData._dailyRolloverTimer = setTimeout(() => {
-    logActivity('🔁 Daily rollover - scheduling next day');
-    scheduleDailyPlan();
-  }, rolloverDelay);
-  
-  logActivity(`⏰ Daily rollover scheduled for ${rolloverTime.toUTCString()}`);
+function sendToDebugChannel(message) {
+  sendToChannel(DEBUG_CHANNEL_ID, message);
 }
 
-// Continuous operations
-function startContinuousOperations(sprayerId) {
-  console.log('🚀 Starting continuous operations...');
+// ======================= BOT STARTUP =======================
+client.on("ready", () => {
+  console.log(`🤖 Logged in as ${client.user.tag}`);
+  console.log(`📊 Bot is in ${client.guilds.cache.size} guild(s)`);
+  discordReady = true;
   
-  // Spray operations - check every 30 seconds
-  setInterval(async () => {
-    if (userData.isActive && isWithinActiveWindow()) {
-      if (!userData.nextSprayTime || new Date() >= new Date(userData.nextSprayTime)) {
-        await executeScheduledSpray(sprayerId);
+  client.guilds.cache.forEach(guild => {
+    console.log(`📊 In guild: ${guild.name} (${guild.id})`);
+    guild.channels.cache.forEach(channel => {
+      discordChannelCache[channel.id] = channel;
+      if (channel.id === DEBUG_CHANNEL_ID || channel.id === CATCH_ALL_CHANNEL_ID) {
+        console.log(`📊 Found target channel: ${channel.name} (${channel.id})`);
       }
+    });
+  });
+  
+  sendToDebugChannel(`🤖 Bot started successfully in ${client.guilds.cache.size} guilds`);
+  
+  setTimeout(() => {
+    connectWebSocket();
+  }, 2000);
+  
+  connectionMonitorInterval = setInterval(() => {
+    const timeSinceLastMessage = Date.now() - lastMessageTime;
+    
+    if (timeSinceLastMessage > 120000 && socket?.readyState === WebSocket.OPEN) {
+      console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
+      sendToDebugChannel(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, reconnecting...`);
+      cleanupSocket();
+      scheduleReconnect();
     }
   }, 30000);
-  
-  // Funds check during active windows - every 5 hours
-  setInterval(async () => {
-    if (isWithinActiveWindow() && userData.isActive) {
-      await checkFunds();
-    }
-  }, 5 * 60 * 60 * 1000);
-}
-
-// Initialize the spray service
-async function initialize() {
-  try {
-    console.log('🚀 INITIALIZING SPRAYER SERVICE...');
-    
-    // Refresh token
-    await refreshToken();
-    
-    // Wait a bit then start operations
-    setTimeout(() => {
-      logActivity('🚀 Starting operations after token refresh');
-      
-      // Schedule daily plan
-      scheduleDailyPlan();
-      
-      // Check funds
-      checkFunds();
-      
-      // Start continuous operations - use saved sprayerId
-      startContinuousOperations(getCurrentSprayerId());
-    }, 60000);
-    
-    console.log('✅ Sprayer service initialized successfully');
-    
-  } catch (error) {
-    console.error('❌ Failed to initialize sprayer service:', error);
-  }
-}
-
-// ======================= DATA ACCESS FUNCTIONS =======================
-
-function getUserData() {
-  // Create safe copy without timer objects
-  const safeData = { ...userData };
-  delete safeData._achTimers;
-  delete safeData._dailyRolloverTimer;
-  
-  // Convert dates to ISO strings
-  if (safeData._effectiveStartUTC instanceof Date) {
-    safeData._effectiveStartUTC = safeData._effectiveStartUTC.toISOString();
-  }
-  if (safeData._effectiveEndUTC instanceof Date) {
-    safeData._effectiveEndUTC = safeData._effectiveEndUTC.toISOString();
-  }
-  
-  return safeData;
-}
-
-function getActivityLogs(limit = 100) {
-  return userData.logs.slice(0, limit);
-}
-
-function getDebugLogs(limit = 50) {
-  return debugLogs.slice(0, limit);
-}
-
-// ======================= EXPRESS SERVER =======================
-const app = express();
-const server = http.createServer(app);
-
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-
-// ======================= API ROUTES =======================
-
-// Get user data for dashboard
-app.get('/api/user', (req, res) => {
-  const safeData = getUserData();
-  safeConfigData = {
-    sprayerId: getCurrentSprayerId()
-  };
-  res.json({ ...safeData, config: safeConfigData });
 });
 
-// Get activity logs
-app.get('/api/activity', (req, res) => {
-  const limit = parseInt(req.query.limit) || 100;
-  res.json(getActivityLogs(limit));
+client.on("error", (error) => {
+  console.error("Discord client error:", error);
+  sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
 });
 
-// Get debug logs
-app.get('/api/debug-logs', (req, res) => {
-  const limit = parseInt(req.query.limit) || 50;
-  res.json(getDebugLogs(limit));
+client.on("disconnect", (event) => {
+  console.log(`🔴 Discord disconnected:`, event);
+  discordReady = false;
+  sendToDebugChannel(`🔴 Discord disconnected`);
 });
 
-// ======================= CONFIGURATION API =======================
+client.on("reconnecting", () => {
+  console.log(`🔄 Discord reconnecting...`);
+  sendToDebugChannel(`🔄 Discord reconnecting...`);
+});
 
-// Get current config
-app.get('/api/config', (req, res) => {
-  res.json({
-    sprayerId: getCurrentSprayerId()
+client.on("resume", () => {
+  console.log(`🟢 Discord resumed`);
+  discordReady = true;
+  sendToDebugChannel(`🟢 Discord resumed`);
+});
+
+// ======================= HEALTH CHECK SERVER =======================
+const server = http.createServer((req, res) => {
+  const timeSinceLastMessage = Date.now() - lastMessageTime;
+  const wsStatus = socket?.readyState === WebSocket.OPEN ? 'Connected' : 'Disconnected';
+  const wsState = socket?.readyState;
+  
+  res.writeHead(200, { 
+    'Content-Type': 'text/plain',
+    'Connection': 'keep-alive'
   });
+  res.end(`Bot Status:
+- Discord Ready: ${discordReady}
+- Discord Channels Cached: ${Object.keys(discordChannelCache).length}
+- Proxy: ${PROXY_HOST ? `Using ${PROXY_HOST}:${PROXY_PORT}` : 'None'}
+- WebSocket: ${wsStatus} (State: ${wsState})
+- Last Message: ${Math.round(timeSinceLastMessage/1000)}s ago
+- Reconnect Attempts: ${reconnectAttempts}
+- Uptime: ${Math.round(process.uptime() / 60)} minutes
+- Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)} MB
+`);
+});
+server.keepAliveTimeout = 60000;
+server.listen(8080, '0.0.0.0', () => {
+  console.log('Health check server listening on port 8080');
 });
 
-// Update sprayer ID
-app.post('/api/config/sprayer-id', (req, res) => {
-  const { sprayerId } = req.body;
-  if (sprayerId === undefined || isNaN(parseInt(sprayerId))) {
-    return res.status(400).json({ success: false, error: 'Invalid sprayer ID' });
+// ======================= VALIDATE AND LOGIN =======================
+if (!process.env.TOKEN) {
+  console.error("❌ No Discord token found in environment variables!");
+  process.exit(1);
+}
+
+console.log("🔑 Attempting to login to Discord...");
+console.log(`🔑 Token length: ${process.env.TOKEN.length} characters`);
+console.log(`🔑 Token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
+
+if (PROXY_HOST) {
+  console.log(`🌐 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
+} else {
+  console.log("🌐 No proxy configured - direct connection");
+}
+
+const loginTimeout = setTimeout(() => {
+  console.error("❌ Discord login TIMEOUT - No response after 10 seconds!");
+  console.error("❌ Please check your TOKEN environment variable");
+  console.error(`❌ Current token prefix: ${process.env.TOKEN.substring(0, 15)}...`);
+  console.error("❌ Make sure you copied the Bot Token, not the Client ID or Client Secret");
+  if (!PROXY_HOST) {
+    console.error("❌ Try enabling a proxy - Render IPs may be blocked by Discord");
   }
-  
-  const newId = updateSprayerId(sprayerId);
-  res.json({ success: true, sprayerId: newId });
-});
+  process.exit(1);
+}, 15000);
 
-// Manual triggers
-app.post('/api/refresh', async (req, res) => {
-  const success = await refreshToken();
-  res.json({ success, message: success ? 'Token refreshed' : 'Refresh failed' });
-});
-
-app.post('/api/scheduled-spray', async (req, res) => {
-  const { sprayerId = getCurrentSprayerId() } = req.body;
-  const result = await executeScheduledSpray(sprayerId);
-  res.json({ success: !!result, result });
-});
-
-app.post('/api/claim-achievements', async (req, res) => {
-  const claimed = await claimAchievements();
-  res.json({ success: claimed > 0, claimed });
-});
-
-app.post('/api/check-funds', async (req, res) => {
-  const funds = await checkFunds();
-  res.json({ success: funds !== null, funds });
-});
-
-// Manual spray endpoint with buy spray logic
-app.post('/api/proxy/manual-spray', async (req, res) => {
-  try {
-    const { sprayerId = getCurrentSprayerId() } = req.body;
-    const result = await executeManualSpray(sprayerId);
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Multiple manual sprays
-app.post('/api/proxy/multiple-sprays', async (req, res) => {
-  try {
-    const { count = 1, sprayerId = getCurrentSprayerId() } = req.body;
-    const results = await executeMultipleSprays(count, sprayerId);
-    res.json(results);
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Proxy for pack operations
-app.get('/api/proxy/packs', async (req, res) => {
-  try {
-    const result = await getUserPacks();
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json({ error: result.error });
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/proxy/open-pack', async (req, res) => {
-  try {
-    const { packId } = req.body;
-    const result = await openPack(packId);
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json({ error: result.error });
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.post('/api/proxy/card-templates', async (req, res) => {
-  try {
-    const { templateIds } = req.body;
-    const result = await getCardTemplates(templateIds);
-    if (result.success) {
-      res.json(result);
-    } else {
-      res.status(500).json({ error: result.error });
-    }
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// ======================= MARKET LISTING API ROUTES =======================
-
-// Get current JWT token status
-app.get('/api/market/status', (req, res) => {
-  res.json({
-    hasToken: !!userData.jwtToken,
-    tokenValid: userData.isActive
+client.login(process.env.TOKEN)
+  .then(() => {
+    clearTimeout(loginTimeout);
+    console.log("✅ Discord login successful");
+  })
+  .catch((err) => {
+    clearTimeout(loginTimeout);
+    console.error("❌ Login error:", err);
+    console.error("❌ Full error:", JSON.stringify(err, null, 2));
+    process.exit(1);
   });
-});
 
-// Execute market listings
-app.post('/api/market/list', async (req, res) => {
-  try {
-    const { 
-      cardIds,
-      prices,
-      delayMs = 1700
-    } = req.body;
-    
-    if (!cardIds || !Array.isArray(cardIds) || cardIds.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No card IDs provided' 
-      });
-    }
-    
-    if (!userData.jwtToken) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No JWT token available. Please ensure the bot has refreshed the token.' 
-      });
-    }
-    
-    if (!userData.isActive) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'JWT token is not active. Please wait for token refresh.' 
-      });
-    }
-    
-    const result = await executeMarketListings(
-      cardIds,
-      prices || [],
-      userData.jwtToken,
-      delayMs,
-      null // No progress callback for API route
-    );
-    
-    res.json(result);
-    
-  } catch (error) {
-    console.error('Market listing error:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// ======================= BREWING API ROUTES =======================
-
-// Execute brewing
-app.post('/api/brewing/execute', async (req, res) => {
-  try {
-    const { 
-      brewingPlanId = '3202',
-      silvercoins = 5000,
-      minMintNumber = 30,
-      maxBrews = 10,
-      operationDelay = 3400
-    } = req.body;
-    
-    if (!userData.jwtToken) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No JWT token available' 
-      });
-    }
-    
-    if (!userData.isActive) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'JWT token is not active' 
-      });
-    }
-
-    // Create a stop request reference that can be accessed by the brewing function
-    const stopRequestRef = { stopped: false };
-    
-    // Store in a temporary map with session ID
-    const sessionId = Date.now().toString();
-    brewingSessions[sessionId] = { stopRequestRef };
-
-    // Execute brewing in background
-    const result = await executeBrewing(
-      brewingPlanId,
-      silvercoins,
-      minMintNumber,
-      maxBrews,
-      operationDelay,
-      stopRequestRef
-    );
-
-    delete brewingSessions[sessionId];
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// Store brewing sessions for stop functionality
-let brewingSessions = {};
-
-// Stop brewing
-app.post('/api/brewing/stop', (req, res) => {
-  try {
-    // Set stop flag for all active sessions
-    Object.values(brewingSessions).forEach(session => {
-      if (session.stopRequestRef) {
-        session.stopRequestRef.stopped = true;
-      }
-    });
-    res.json({ success: true, message: 'Stop requested' });
-  } catch (error) {
-    res.status(500).json({ 
-      success: false, 
-      error: error.message 
-    });
-  }
-});
-
-// ======================= START SERVER =======================
-const PORT = process.env.PORT || 8080;
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Sprayer server running on port ${PORT}`);
-  console.log(`📊 Dashboard available at http://localhost:${PORT} (or your Render URL)`);
-  console.log(`💾 Saved sprayer ID: ${getCurrentSprayerId()}`);
-  
-  // Initialize sprayer service (delayed to ensure token refresh first)
-  setTimeout(() => {
-    initialize();
-  }, 5000);
-});
-
-// Handle graceful shutdown
+// ======================= GRACEFUL SHUTDOWN =======================
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close();
+  console.log('Received SIGTERM, shutting down gracefully...');
+  cleanupSocket();
+  if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
+  client.destroy();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  server.close();
+  console.log('Received SIGINT, shutting down gracefully...');
+  cleanupSocket();
+  if (connectionMonitorInterval) clearInterval(connectionMonitorInterval);
+  client.destroy();
   process.exit(0);
 });
