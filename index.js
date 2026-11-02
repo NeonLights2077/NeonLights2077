@@ -70,6 +70,59 @@ const EWC_PACKS = new Set([
 
 const EWC_KEYWORDS = ["EWC", "First Edition"];
 
+// Pack-name matching for market-list and market-sold events.
+// These payloads do not reliably provide packTemplate.categoryId.
+const KL_PACK_KEYWORDS = [
+  "Kings Cup",
+  "Queens Cup",
+  "Kings League",
+  "Queens League",
+  "Kings World Cup",
+  "KWCC",
+  "Wild Cards",
+  "Wild Plata",
+  "Split 1",
+  "Split 5",
+  "Campeón",
+  "Campeones",
+  "Bienvenida",
+  "Oro 2023-24",
+  "Oro 2024-25",
+  "Oro+ 2024-25",
+  "Plata 2023-24",
+  "Plata 2024-25",
+  "Plata+ 2024-25",
+  "Platino 2023-24",
+  "Platino 2024-25",
+  "Platino+ 2024-25",
+  "S5 Rewards"
+];
+
+const EWC_PACK_KEYWORDS = [
+  "EWC",
+  "First Edition"
+];
+
+function normalisePackName(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function packNameMatches(itemName, keywords) {
+  const name = normalisePackName(itemName);
+  return keywords.some(keyword => name.includes(normalisePackName(keyword)));
+}
+
+function isKLPack(itemName) {
+  return packNameMatches(itemName, KL_PACK_KEYWORDS);
+}
+
+function isEWCPack(itemName) {
+  return packNameMatches(itemName, EWC_PACK_KEYWORDS);
+}
+
 const KL_PACKS = new Set([
 "Campeón: Split 3", "KWCC: Champions Reward", "Kings Cup America Champions",
 "Kings Cup Brazil", "Kings Cup Brazil Prestige", "Kings Cup Brazil Rewards",
@@ -199,7 +252,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.30 &&
       //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
-	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
+	  !isKLPack(data.entity?.itemName) && !isEWCPack(data.entity?.itemName),
   },
   {
     name: "listed-packs-30c",
@@ -211,7 +264,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.30 &&
       //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
-	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
+	  !isKLPack(data.entity?.itemName) && !isEWCPack(data.entity?.itemName),
   },
   {
     name: "listed-all-cards",
@@ -252,7 +305,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
       //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
-	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
+	  !isKLPack(data.entity?.itemName) && !isEWCPack(data.entity?.itemName),
   },
   {
     name: "sold-packs-10c",
@@ -264,7 +317,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
       //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
-	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
+	  !isKLPack(data.entity?.itemName) && !isEWCPack(data.entity?.itemName),
   },
   {
     name: "sold-all",
@@ -321,7 +374,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.15 &&
       //KL_PACKS.has(data.entity?.itemName),
-	  [73].includes(data.entity?.packTemplate?.categoryId),
+	  isKLPack(data.entity?.itemName),
   },
   {
     name: "kl-listed-packs-15c",
@@ -333,7 +386,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.15 &&
       //KL_PACKS.has(data.entity?.itemName),
-	  [73].includes(data.entity?.packTemplate?.categoryId),
+	  isKLPack(data.entity?.itemName),
   },
   {
     name: "kl-listed-all-cards",
@@ -385,7 +438,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
       //KL_PACKS.has(data.entity?.itemName),
-	  [73].includes(data.entity?.packTemplate?.categoryId),
+	  isKLPack(data.entity?.itemName),
   },
   {
     name: "kl-sold-packs-10c",
@@ -397,7 +450,7 @@ const CHANNEL_CONFIG = [
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
       //KL_PACKS.has(data.entity?.itemName),
-	  [73].includes(data.entity?.packTemplate?.categoryId),
+	  isKLPack(data.entity?.itemName),
   },
   {
     name: "KL-sold-all",
@@ -468,7 +521,7 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       //EWC_PACKS.has(data.entity?.itemName),
-	  [205].includes(data.entity?.packTemplate?.categoryId),
+	  isEWCPack(data.entity?.itemName),
   },
   {
     name: "ewc-listed-all-cards",
@@ -506,7 +559,7 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       //EWC_PACKS.has(data.entity?.itemName),
-	  [205].includes(data.entity?.packTemplate?.categoryId),
+	  isEWCPack(data.entity?.itemName),
   },
   {
     name: "EWC-sold-all",
@@ -625,7 +678,7 @@ const CHANNEL_CONFIG = [
   {
     name: "PACK-BATTLE-CANCELLED",
     id: "1566733217300615221",
-    event: "pack-battle-CANCELLED",
+    event: "pack-battle-cancelled",
     template: (data) => {
       return `❌Cancelled  \`${data.battleId || "Unknown"}\` - \`${data.id || "Unknown"}\``;
     },
@@ -634,27 +687,27 @@ const CHANNEL_CONFIG = [
   {
     name: "PACK-BATTLE-OPENED",
     id: "1566733217300615221",
-    event: "pack-battle-OPENED",
+    event: "pack-battle-opened",
     template: (data) => {
-      return `✅Opened battle \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Opened battle \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
   {
     name: "PACK-BATTLE-JOINED",
     id: "1566733217300615221",
-    event: "pack-battle-JOINED",
+    event: "pack-battle-joined",
     template: (data) => {
-      return `Joined \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Joined \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
     {
     name: "PACK-BATTLE-FINISHED",
     id: "1566733217300615221",
-    event: "pack-battle-FINISHED",
+    event: "pack-battle-finished",
     template: (data) => {
-      return `✅Finished \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Finished \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
