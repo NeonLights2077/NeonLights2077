@@ -19,7 +19,7 @@ if (PROXY_HOST && PROXY_PORT) {
   }
   proxyUrl += `${PROXY_HOST}:${PROXY_PORT}`;
   
-  console.log(`🌐 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
+  console.log(`馃寪 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
   proxyAgent = new HttpsProxyAgent(proxyUrl);
 }
 
@@ -35,7 +35,7 @@ const client = new Client({
 
 // ======================= FILTERS =======================
 const KL_KEYWORDS = [
-  "España", "Split 1", "Split 3", "Split 5", "2023-24", "2024-25", "SP5",
+  "Espa帽a", "Split 1", "Split 3", "Split 5", "2023-24", "2024-25", "SP5",
   "Kings Cup", "Queens Cup", "KWC Nations", "Kings League", "Queens League", "Kings World"
 ];
 
@@ -71,21 +71,21 @@ const EWC_PACKS = new Set([
 const EWC_KEYWORDS = ["EWC", "First Edition"];
 
 const KL_PACKS = new Set([
-"Campeón: Split 3", "KWCC: Champions Reward", "Kings Cup America Champions",
+"Campe贸n: Split 3", "KWCC: Champions Reward", "Kings Cup America Champions",
 "Kings Cup Brazil", "Kings Cup Brazil Prestige", "Kings Cup Brazil Rewards",
 "Kings Cup Europe Champions", "Kings Cup Germany", "Kings Cup Germany Prestige",
 "Kings Cup Germany Reward", "Kings Cup Italy", "Kings Cup Italy Prestige",
 "Kings Cup Italy Reward", "Kings Cup MENA", "Kings Cup MENA Prestige",
 "Kings Cup MENA Reward", "Kings Cup Mexico", "Kings Cup Mexico Prestige",
-"Kings Cup Mexico Reward", "Kings Cup Spain", "Kings Cup Spain Coentrão",
-"Kings Cup Spain Coentrão Prestige", "Kings Cup Spain Prestige", "Kings Cup Spain Reward",
-"Kings League Brazil", "Kings League Brazil: Campeão", "Kings League Brazil: Prestige",
+"Kings Cup Mexico Reward", "Kings Cup Spain", "Kings Cup Spain Coentr茫o",
+"Kings Cup Spain Coentr茫o Prestige", "Kings Cup Spain Prestige", "Kings Cup Spain Reward",
+"Kings League Brazil", "Kings League Brazil: Campe茫o", "Kings League Brazil: Prestige",
 "Kings League Brazil: Reward", "Kings League France", "Kings League France: Champion",
 "Kings League France: Reward", "Kings League Germany", "Kings League Germany: Champions",
 "Kings League Germany: Prestige", "Kings League Germany: Reward", "Kings League Italy",
 "Kings League Italy G9", "Kings League Italy G9: Prestige", "Kings League Italy: Prestige",
-"Kings League Mexico", "Kings League Mexico: Campeón", "Kings League Mexico: Prestige",
-"Kings League Mexico: Reward", "Kings League Spain", "Kings League Spain: Campeón",
+"Kings League Mexico", "Kings League Mexico: Campe贸n", "Kings League Mexico: Prestige",
+"Kings League Mexico: Reward", "Kings League Spain", "Kings League Spain: Campe贸n",
 "Kings League Spain: Prestige", "Kings League Spain: Reward", "Kings World Cup Nations",
 "Kings World Cup Nations Champions", "Kings World Cup Nations Reward", "Kings World Cup Nations: Prestige",
 "KWCC", "KWCC: Prestige", "KWCC: Reward", "Oro 2023-24", "Oro 2024-25", "Oro+ 2024-25",
@@ -93,8 +93,8 @@ const KL_PACKS = new Set([
 "Plata 2023-24", "Plata 2024-25", "Plata+ 2024-25", "Platino 2023-24", "Platino 2024-25",
 "Platino+ 2024-25", "Queens Cup Champions", "Queens Cup Mexico", "Queens Cup Mexico Prestige",
 "Queens Cup Mexico Reward", "Queens Cup Spain", "Queens Cup Spain Prestige", "Queens Cup Spain Reward",
-"Queens League Mexico", "Queens League Mexico: Campeón", "Queens League Mexico: Reward",
-"Queens League Spain", "Queens League Spain: Campeón", "Queens League Spain: Prestige",
+"Queens League Mexico", "Queens League Mexico: Campe贸n", "Queens League Mexico: Reward",
+"Queens League Spain", "Queens League Spain: Campe贸n", "Queens League Spain: Prestige",
 "S5 Rewards 2024-25", "S5 Wild Cards Cuartos", "S5 Wild Cards J1 2024-25", "S5 Wild Cards J10",
 "S5 Wild Cards J11", "S5 Wild Cards J3 2024-25", "S5 Wild Cards J4 2024-25", "S5 Wild Cards J5 2024-25",
 "S5 Wild Cards J6 2024-25", "S5 Wild Cards J7", "S5 Wild Cards J8", "S5 Wild Cards J9",
@@ -154,7 +154,9 @@ const CHANNEL_CONFIG = [
       ).join("\n");
     },
     condition: (data) => data.cards?.some(card => card.mintNumber <= 30) &&
-      !KL_PACKS.has(data?.packName) && !EWC_PACKS.has(data?.packName),
+      //!KL_PACKS.has(data?.packName) && !EWC_PACKS.has(data?.packName),
+	  //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+	  ![73, 205].includes(data?.packTemplate?.categoryId),
   },
   {
     name: "listed-20",
@@ -196,7 +198,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.30 &&
-      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+      //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "listed-packs-30c",
@@ -207,7 +210,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.30 &&
-      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+      //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "listed-all-cards",
@@ -247,7 +251,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
-      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+      //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "sold-packs-10c",
@@ -258,7 +263,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
-      !KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+      //!KL_PACKS.has(data.entity?.itemName) && !EWC_PACKS.has(data.entity?.itemName),
+	  ![73, 205].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "sold-all",
@@ -288,7 +294,8 @@ const CHANNEL_CONFIG = [
       ).join("\n");
     },
     condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
-      KL_PACKS.has(data?.packName),
+      //KL_PACKS.has(data?.packName),
+	  [73].includes(data?.packTemplate?.categoryId),
   },
   {
     name: "kl-listed-200",
@@ -313,7 +320,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.15 &&
-      KL_PACKS.has(data.entity?.itemName),
+      //KL_PACKS.has(data.entity?.itemName),
+	  [73].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "kl-listed-packs-15c",
@@ -324,7 +332,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.15 &&
-      KL_PACKS.has(data.entity?.itemName),
+      //KL_PACKS.has(data.entity?.itemName),
+	  [73].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "kl-listed-all-cards",
@@ -375,7 +384,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) > 0.11 &&
-      KL_PACKS.has(data.entity?.itemName),
+      //KL_PACKS.has(data.entity?.itemName),
+	  [73].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "kl-sold-packs-10c",
@@ -386,7 +396,8 @@ const CHANNEL_CONFIG = [
     },
     condition: (data) => data.entity?.type === "pack" &&
       parseFloat(data.market?.price) <= 0.11 &&
-      KL_PACKS.has(data.entity?.itemName),
+      //KL_PACKS.has(data.entity?.itemName),
+	  [73].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "KL-sold-all",
@@ -415,7 +426,8 @@ const CHANNEL_CONFIG = [
       ).join("\n");
     },
     condition: (data) => data.cards?.some(card => card.mintNumber <= 50) &&
-      EWC_PACKS.has(data?.packName),
+      //EWC_PACKS.has(data?.packName),
+	  [205].includes(data?.packTemplate?.categoryId),
   },
   {
     name: "ewc-feed-rest",
@@ -429,7 +441,9 @@ const CHANNEL_CONFIG = [
       ).join("\n");
     },
     condition: (data) => data.cards?.some(card => card.mintNumber > 50) &&
-      EWC_PACKS.has(data?.packName),
+      //EWC_PACKS.has(data?.packName),
+	  [205].includes(data?.packTemplate?.categoryId),
+
   },
   {
     name: "ewc-listed-100",
@@ -453,7 +467,8 @@ const CHANNEL_CONFIG = [
       return `${data.entity?.itemName || "Unknown"} listed for **${formatPrice(data.market?.price)}** by *${data.user?.username || "Unknown"}* - ${data.entity?.id} - Market \`${data.market?.id}\``;
     },
     condition: (data) => data.entity?.type === "pack" &&
-      EWC_PACKS.has(data.entity?.itemName),
+      //EWC_PACKS.has(data.entity?.itemName),
+	  [205].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "ewc-listed-all-cards",
@@ -490,7 +505,8 @@ const CHANNEL_CONFIG = [
       return `*${data.user?.username || "Unknown"}* bought ${data.entity?.itemName || "Unknown"} for **${formatPrice(data.market?.price)}** - ${data.entity?.id}`;
     },
     condition: (data) => data.entity?.type === "pack" &&
-      EWC_PACKS.has(data.entity?.itemName),
+      //EWC_PACKS.has(data.entity?.itemName),
+	  [205].includes(data.entity?.packTemplate?.categoryId),
   },
   {
     name: "EWC-sold-all",
@@ -512,7 +528,7 @@ const CHANNEL_CONFIG = [
     id: "1400227416885952644",
     event: "market-list",
     template: (data) => {
-      return `📦 *${data.user?.username || "Unknown"}* listed a bundle *${data.entity?.itemName || "Unknown"}* for **${formatPrice(data.market?.price)}** - #${data.entity?.id} - [Market](<https://kolex.gg/bundles/view/${data.entity?.id}>) - ID \`${data?.id}\` - ID \`${data.market?.id}\``;
+      return `馃摝 *${data.user?.username || "Unknown"}* listed a bundle *${data.entity?.itemName || "Unknown"}* for **${formatPrice(data.market?.price)}** - #${data.entity?.id} - [Market](<https://kolex.gg/bundles/view/${data.entity?.id}>) - ID \`${data?.id}\` - ID \`${data.market?.id}\``;
     },
     condition: (data) => data.entity?.type === "bundle",
   },
@@ -521,7 +537,7 @@ const CHANNEL_CONFIG = [
     id: "1400227451585433640",
     event: "market-sold",
     template: (data) => {
-      return `💰 *${data.user?.username || "Unknown"}* bought a bundle *${data.entity?.itemName || "Unknown"}* for **${formatPrice(data.market?.price)}** - #${data.entity?.id} - [Market](<https://kolex.gg/bundles/view/${data.entity?.id}>) - ID \`${data?.id}\``;
+      return `馃挵 *${data.user?.username || "Unknown"}* bought a bundle *${data.entity?.itemName || "Unknown"}* for **${formatPrice(data.market?.price)}** - #${data.entity?.id} - [Market](<https://kolex.gg/bundles/view/${data.entity?.id}>) - ID \`${data?.id}\``;
     },
     condition: (data) => data.entity?.type === "bundle",
   },
@@ -530,7 +546,7 @@ const CHANNEL_CONFIG = [
     id: "1400237694172532807",
     event: "market-list",
     template: (data) => {
-      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+      return `馃捀 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
     },
     condition: (data) =>
       ["card", "sticker"].includes(data.entity?.type) &&
@@ -542,7 +558,7 @@ const CHANNEL_CONFIG = [
     id: "1433181458738053273",
     event: "market-list",
     template: (data) => {
-      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+      return `馃捀 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
     },
     condition: (data) =>
       ["card", "sticker"].includes(data.entity?.type) &&
@@ -554,7 +570,7 @@ const CHANNEL_CONFIG = [
     id: "1400238804182372382",
     event: "market-list",
     template: (data) => {
-      return `💸 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
+      return `馃捀 **${data.entity?.mintBatch || "N/A"}${data.entity?.mintNumber || "N/A"}** ${data.entity?.type} ${data.entity?.itemName || "Unknown"} listed by *${data.user?.username || "Unknown"}* for **${formatPrice(data.market?.price)}** - ${data.entity?.id} - [Market](<https://kolex.gg/market/${data.entity?.type}/${data.entity?.templateId}?sort=mint>) \`${data.market?.id}\``;
     },
     condition: (data) =>
       ["card", "sticker"].includes(data.entity?.type) &&
@@ -566,7 +582,7 @@ const CHANNEL_CONFIG = [
     id: "1400240719423082506",
     event: "pack-purchased",
     template: (data) => {
-      return `🛒 *${data.user?.username || "Unknown"}* bought ${data.amount} pack(s) \`${data.packTemplateId}\``;
+      return `馃洅 *${data.user?.username || "Unknown"}* bought ${data.amount} pack(s) \`${data.packTemplateId}\``;
     },
     condition: null,
   },
@@ -584,7 +600,7 @@ const CHANNEL_CONFIG = [
     id: "1483382452331479040",
     event: "trade-accepted",
     template: (data) => {
-      return `✅ Accepted | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+      return `鉁?Accepted | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
     },
     condition: null,
   },
@@ -593,7 +609,7 @@ const CHANNEL_CONFIG = [
     id: "1483382452331479040",
     event: "trade-sent",
     template: (data) => {
-      return `📤 Sent | to *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+      return `馃摛 Sent | to *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\` from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
     },
     condition: null,
   },
@@ -602,10 +618,55 @@ const CHANNEL_CONFIG = [
     id: "1483382452331479040",
     event: "trade-declined",
     template: (data) => {
-      return `❌ Declined | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\`, was sent from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
+      return `鉂?Declined | by *${data.receiver.username || "Unknown"}* \`${data.receiver.id}\`, was sent from *${data.sender.username || "Unknown"}* \`${data.sender.id}\``;
     },
     condition: null,
   },  
+  {
+    name: "PACK-BATTLE-CANCELLED",
+    id: "1566733217300615221",
+    event: "pack-battle-CANCELLED",
+    template: (data) => {
+      return `鉂?Cancelled  \`${data.battleId || "Unknown"}\` - \`${data.id || "Unknown"}\``;
+    },
+    condition: null,
+  },  
+  {
+    name: "PACK-BATTLE-OPENED",
+    id: "1566733217300615221",
+    event: "pack-battle-OPENED",
+    template: (data) => {
+      return `鉂?Opened battle \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+    },
+    condition: null,
+  }, 
+  {
+    name: "PACK-BATTLE-JOINED",
+    id: "1566733217300615221",
+    event: "pack-battle-JOINED",
+    template: (data) => {
+      return `鉂?Joined \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+    },
+    condition: null,
+  }, 
+    {
+    name: "PACK-BATTLE-FINISHED",
+    id: "1566733217300615221",
+    event: "pack-battle-FINISHED",
+    template: (data) => {
+      return `鉂?Finished \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+    },
+    condition: null,
+  }, 
+      {
+    name: "AUCTION-BID-FEED",
+    id: "1566733256672542740",
+    event: "auction-bid-feed",
+    template: (data) => {
+      return `鉂?Bid #\`${data.auction.bidId || "Unknown"}\` for USD`${data.auction.amount || "Unknown"}` in auction \`${data.auction.id || "Unknown"}\` by `${data.user.username || "Unknown"}` (`${data.user.id || "Unknown"}`), that ends at ${data.auction.ends || "Unknown"}. For `${data.entity.type || "Unknown"}` *`${data.entity.mintBatch || "Unknown"}`**`${data.entity.mintNumber || "Unknown"}`* `${data.entity.itemName || "Unknown"}` - \`${data.id || "Unknown"}\``;
+    },
+    condition: null,
+  }, 
 ];
 
 // ======================= WEBSOCKET MANAGEMENT =======================
@@ -644,11 +705,11 @@ function cleanupSocket() {
 
 function scheduleReconnect() {
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    console.log("❌ Max reconnection attempts reached");
+    console.log("鉂?Max reconnection attempts reached");
     return;
   }
   const delay = Math.min(5000 * Math.pow(2, reconnectAttempts), 300000);
-  console.log(`🔄 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
+  console.log(`馃攧 Scheduling reconnection attempt ${reconnectAttempts + 1} in ${Math.round(delay/1000)}s`);
   reconnectTimeout = setTimeout(() => {
     reconnectAttempts++;
     connectWebSocket();
@@ -658,7 +719,7 @@ function scheduleReconnect() {
 function connectWebSocket() {
   cleanupSocket();
   const wsUrl = "wss://sockets.kolex.gg/socket.io/?EIO=3&transport=websocket";
-  console.log(`🔄 Attempting connection to: ${wsUrl} (Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
+  console.log(`馃攧 Attempting connection to: ${wsUrl} (Attempt ${reconnectAttempts + 1}/${MAX_RECONNECT_ATTEMPTS})`);
   
   const wsKey = generateWebSocketKey();
   const options = {
@@ -686,43 +747,43 @@ function connectWebSocket() {
   socket = new WebSocket(wsUrl, options);
 
   socket.on("open", () => {
-    console.log(`🟢 WebSocket Connected to ${wsUrl}`);
-    sendToDebugChannel(`🟢 WebSocket Connected to Kolex.gg`);
+    console.log(`馃煝 WebSocket Connected to ${wsUrl}`);
+    sendToDebugChannel(`馃煝 WebSocket Connected to Kolex.gg`);
     reconnectAttempts = 0;
     lastMessageTime = Date.now();
     
     pingInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send("2");
-        console.log("📤 Sent ping (2)");
+        console.log("馃摛 Sent ping (2)");
       }
     }, 15000);
     
     heartbeatInterval = setInterval(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send('42["heartbeat"]');
-        console.log("💓 Sent heartbeat");
+        console.log("馃挀 Sent heartbeat");
       }
     }, 30000);
     
     setTimeout(() => {
       if (socket?.readyState === WebSocket.OPEN) {
         socket.send('42["join-public-feed"]');
-        console.log("📤 Sent join-public-feed message");
+        console.log("馃摛 Sent join-public-feed message");
       }
     }, 1000);
   });
 
   socket.on("close", (code, reason) => {
-    console.log(`🔴 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
-    sendToDebugChannel(`🔴 WebSocket Disconnected (Code: ${code})`);
+    console.log(`馃敶 WebSocket Disconnected - Code: ${code}, Reason: ${reason || 'No reason'}`);
+    sendToDebugChannel(`馃敶 WebSocket Disconnected (Code: ${code})`);
     cleanupSocket();
     scheduleReconnect();
   });
 
   socket.on("error", (err) => {
     console.error(`WebSocket Error:`, err.message);
-    sendToDebugChannel(`❗ WebSocket Error: ${err.message}`);
+    sendToDebugChannel(`鉂?WebSocket Error: ${err.message}`);
   });
 
   socket.on("message", (rawData) => {
@@ -731,15 +792,15 @@ function connectWebSocket() {
       lastMessageTime = Date.now();
       if (data === "2") { socket.send("3"); return; }
       if (data === "3") return;
-      if (data.startsWith("0")) { console.log("🤝 Socket.io handshake received"); return; }
-      if (data.startsWith("40")) { console.log("🔌 Socket.io connected"); return; }
+      if (data.startsWith("0")) { console.log("馃 Socket.io handshake received"); return; }
+      if (data.startsWith("40")) { console.log("馃攲 Socket.io connected"); return; }
       if (data.startsWith("42")) {
         const payload = data.substring(2);
         const parsed = JSON.parse(payload);
         if (Array.isArray(parsed) && parsed.length >= 2) {
           const [eventName, eventData] = parsed;
           if (eventName === "join-public-feed") {
-            console.log("✅ Successfully joined public feed");
+            console.log("鉁?Successfully joined public feed");
             return;
           }
           if (eventName && eventData) {
@@ -773,14 +834,14 @@ function processEventChannels(eventData) {
 function sendToChannel(channelId, message) {
   if (!message) return;
   if (!discordReady) {
-    console.log(`⚠️ Discord not ready, cannot send to ${channelId}`);
+    console.log(`鈿狅笍 Discord not ready, cannot send to ${channelId}`);
     return;
   }
   const channel = client.channels.cache.get(channelId);
   if (channel) {
     channel.send(message).catch(err => console.error(`Error sending to ${channelId}:`, err));
   } else {
-    console.log(`❌ Channel ${channelId} not found in cache`);
+    console.log(`鉂?Channel ${channelId} not found in cache`);
   }
 }
 
@@ -790,28 +851,28 @@ function sendToDebugChannel(message) {
 
 // ======================= BOT STARTUP =======================
 client.on("ready", () => {
-  console.log(`🤖 Logged in as ${client.user.tag}`);
-  console.log(`📊 Bot is in ${client.guilds.cache.size} guild(s)`);
+  console.log(`馃 Logged in as ${client.user.tag}`);
+  console.log(`馃搳 Bot is in ${client.guilds.cache.size} guild(s)`);
   discordReady = true;
   
   client.guilds.cache.forEach(guild => {
-    console.log(`📊 In guild: ${guild.name} (${guild.id})`);
+    console.log(`馃搳 In guild: ${guild.name} (${guild.id})`);
     guild.channels.cache.forEach(channel => {
       discordChannelCache[channel.id] = channel;
       if (channel.id === DEBUG_CHANNEL_ID || channel.id === CATCH_ALL_CHANNEL_ID) {
-        console.log(`📊 Found target channel: ${channel.name} (${channel.id})`);
+        console.log(`馃搳 Found target channel: ${channel.name} (${channel.id})`);
       }
     });
   });
   
-  sendToDebugChannel(`🤖 Bot started successfully in ${client.guilds.cache.size} guilds`);
+  sendToDebugChannel(`馃 Bot started successfully in ${client.guilds.cache.size} guilds`);
   
   setTimeout(() => connectWebSocket(), 2000);
   
   connectionMonitorInterval = setInterval(() => {
     const timeSinceLastMessage = Date.now() - lastMessageTime;
     if (timeSinceLastMessage > 120000 && socket?.readyState === WebSocket.OPEN) {
-      console.log(`⚠️ No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
+      console.log(`鈿狅笍 No messages for ${Math.round(timeSinceLastMessage/1000)}s, forcing reconnect`);
       cleanupSocket();
       scheduleReconnect();
     }
@@ -820,7 +881,7 @@ client.on("ready", () => {
 
 client.on("error", (error) => {
   console.error("Discord client error:", error);
-  sendToDebugChannel(`❗ Discord Client Error: ${error.message}`);
+  sendToDebugChannel(`鉂?Discord Client Error: ${error.message}`);
 });
 
 // ======================= HEALTH CHECK SERVER =======================
@@ -843,21 +904,21 @@ server.listen(8080, '0.0.0.0', () => {
 
 // ======================= LOGIN =======================
 if (!process.env.TOKEN) {
-  console.error("❌ No Discord token found!");
+  console.error("鉂?No Discord token found!");
   process.exit(1);
 }
 
-console.log("🔑 Attempting to login to Discord...");
+console.log("馃攽 Attempting to login to Discord...");
 if (PROXY_HOST) {
-  console.log(`🌐 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
+  console.log(`馃寪 Using proxy: ${PROXY_HOST}:${PROXY_PORT}`);
 } else {
-  console.log("🌐 No proxy configured - direct connection");
+  console.log("馃寪 No proxy configured - direct connection");
 }
 
 const loginTimeout = setTimeout(() => {
-  console.error("❌ Discord login TIMEOUT - No response after 15 seconds!");
+  console.error("鉂?Discord login TIMEOUT - No response after 15 seconds!");
   if (!PROXY_HOST) {
-    console.error("❌ Try enabling a proxy - Render IPs may be blocked by Discord");
+    console.error("鉂?Try enabling a proxy - Render IPs may be blocked by Discord");
   }
   process.exit(1);
 }, 15000);
@@ -865,11 +926,11 @@ const loginTimeout = setTimeout(() => {
 client.login(process.env.TOKEN)
   .then(() => {
     clearTimeout(loginTimeout);
-    console.log("✅ Discord login successful");
+    console.log("鉁?Discord login successful");
   })
   .catch((err) => {
     clearTimeout(loginTimeout);
-    console.error("❌ Login error:", err);
+    console.error("鉂?Login error:", err);
     process.exit(1);
   });
 
