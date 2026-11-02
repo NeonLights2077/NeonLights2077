@@ -691,7 +691,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-opened",
     template: (data) => {
-      return `❌Opened battle (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Opened battle [${data.battle.id || "Unknown"}](<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
@@ -700,7 +700,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-joined",
     template: (data) => {
-      return `❌Joined battle (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Joined battle [${data.battle.id || "Unknown"}](<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
@@ -709,7 +709,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-finished",
     template: (data) => {
-      return `❌Finished battle (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Finished battle [${data.battle.id || "Unknown"}](<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
 	
