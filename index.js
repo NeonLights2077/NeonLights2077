@@ -178,7 +178,8 @@ const CHANNEL_CONFIG = [
       return `**${data.event.toUpperCase()}** | User: ${data.user?.username || "Unknown"} | Type: ${data.entity?.type || "N/A"} | Item: ${data.entity?.itemName || "N/A"} | Price: ${data.market?.price ? `${formatPrice(data.market.price)}` : "N/A"}`;
     },
     condition: (data) =>
-      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
+      !["pack-opened", "market-list", "market-sold", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
+	        //!["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
         data.event,
       ),
   },
@@ -190,7 +191,8 @@ const CHANNEL_CONFIG = [
       return `**${data.event.toUpperCase()}** | User: **${data.user?.username || "Unknown"}** | Data: \`\`\`json\n${JSON.stringify(data, null, 2).substring(0, 1900)}\`\`\``;
     },
     condition: (data) =>
-      !["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
+      !["pack-opened", "market-list", "market-sold", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
+	        //!["pack-opened", "market-list", "market-sold", "pack-purchased", "spinner-feed", "trade-accepted", "trade-sent", "trade-declined"].includes(
         data.event,
       ),
   },
@@ -689,7 +691,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-opened",
     template: (data) => {
-      return `❌Opened battle \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Opened battle (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
@@ -698,7 +700,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-joined",
     template: (data) => {
-      return `❌Joined \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Joined battle (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
@@ -707,9 +709,10 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-finished",
     template: (data) => {
-      return `❌Finished \`${data.battle.id || "Unknown"}\`, mode *${data.battle.mode || "Unknown"}*, for \`${data.packCount}\` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Finished battle (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
+	
   }, 
       {
     name: "AUCTION-BID-FEED",
