@@ -691,7 +691,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-opened",
     template: (data) => {
-      return `❌Opened battle [${data.battle.id || "Unknown"}](<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Opened [battle] (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>) ${data.battle.id || "Unknown"}, mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
@@ -700,7 +700,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-joined",
     template: (data) => {
-      return `❌Joined battle [${data.battle.id || "Unknown"}](<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Joined [battle] (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>) ${data.battle.id || "Unknown"}, mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
   }, 
@@ -709,7 +709,7 @@ const CHANNEL_CONFIG = [
     id: "1566733217300615221",
     event: "pack-battle-finished",
     template: (data) => {
-      return `❌Finished battle [${data.battle.id || "Unknown"}](<https://kolex.gg/battles/${data.battle.id || "Unknown"}>), mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
+      return `❌Finished [battle] (<https://kolex.gg/battles/${data.battle.id || "Unknown"}>) ${data.battle.id || "Unknown"}, mode *${data.battle.mode || "Unknown"}*, for `${data.battle.packCount}` pack(s) - \`${data.id || "Unknown"}\``;
     },
     condition: null,
 	
@@ -719,7 +719,10 @@ const CHANNEL_CONFIG = [
     id: "1566733256672542740",
     event: "auction-bid-feed",
     template: (data) => {
-      return `🔨 Bid #\`${data.auction?.bidId || "Unknown"}\` for USD \`${data.auction?.amount || "Unknown"}\` in auction \`${data.auction?.id || "Unknown"}\` by \`${data.user?.username || "Unknown"}\` (\`${data.user?.id || "Unknown"}\`), ending at ${data.auction?.ends || "Unknown"}. For \`${data.entity?.type || "Unknown"}\` **${data.entity?.mintBatch || "Unknown"}${data.entity?.mintNumber || "Unknown"}** ${data.entity?.itemName || "Unknown"} - \`${data.id || "Unknown"}\``;
+      //return `🔨 Bid #\`${data.auction?.bidId || "Unknown"}\` for USD \`${data.auction?.amount || "Unknown"}\` in auction \`${data.auction?.id || "Unknown"}\` by \`${data.user?.username || "Unknown"}\` (\`${data.user?.id || "Unknown"}\`), ending at ${data.auction?.ends || "Unknown"}. For \`${data.entity?.type || "Unknown"}\` **${data.entity?.mintBatch || "Unknown"}${data.entity?.mintNumber || "Unknown"}** ${data.entity?.itemName || "Unknown"} - \`${data.id || "Unknown"}\``;
+	  
+	        return `🔨 **${data.entity?.mintBatch || "Unknown"}${data.entity?.mintNumber || "Unknown"}** ${data.entity?.itemName || "Unknown"} `${data.entity?.type || "Unknown"}`, last bid $`${data.auction?.amount || "Unknown"}` #\`${data.auction?.bidId || "Unknown"}\` - in [auction] <https://kolex.gg/auctions/${data.auction?.id || "Unknown"}>) by *`${data.user?.username || "Unknown"}`* (`${data.user?.id || "Unknown"}`), ending at ${data.auction?.ends || "Unknown"} - \`${data.id || "Unknown"}\``;
+	  
     },
     condition: null,
   }, 
