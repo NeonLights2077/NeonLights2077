@@ -730,7 +730,7 @@ const CHANNEL_CONFIG = [
       ? `<t:${unixEndTime}:R>`
       : "Unknown";
 
-    return `🔨 **${data.entity?.mintBatch || "Unknown"}${data.entity?.mintNumber || "Unknown"}** ${data.entity?.itemName || "Unknown"} ${data.entity?.type || "Unknown"}, last bid **$${amount}** #\`${data.auction?.bidId || "Unknown"}\` - in [auction](https://kolex.gg/auctions/${data.auction?.id}) #\`${data.auction?.id || "Unknown"}\` by *${data.user?.username || "Unknown"}* (\`${data.user?.id || "Unknown"}\`), ending ${discordEndTime} - \`${data.id || "Unknown"}\``;
+    return `🔨 **${data.entity?.mintBatch || "Unknown"}${data.entity?.mintNumber || "Unknown"}** ${data.entity?.itemName || "Unknown"} ${data.entity?.type || "Unknown"}, last bid **$${amount}** #\`${data.auction?.bidId || "Unknown"}\` - in [Auction](<https://kolex.gg/auctions/${data.auction?.id}>) #\`${data.auction?.id || "Unknown"}\` by *${data.user?.username || "Unknown"}* (\`${data.user?.id || "Unknown"}\`), ending ${discordEndTime} - \`${data.id || "Unknown"}\``;
   },
 
   condition: null,
